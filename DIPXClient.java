@@ -47,6 +47,14 @@ public final class DIPXClient implements ClientModInitializer {
                     client.setScreen(new DIPXScreen());
                 }
             }
+
+            // Toggle Sprint: client-side convenience; only engages while moving forward.
+            if (client.player != null && enabled("Toggle Sprint")) {
+                boolean shouldSprint = client.player.forwardSpeed > 0.0F
+                        && !client.player.isSneaking()
+                        && client.player.getHungerManager().getFoodLevel() > 6;
+                client.player.setSprinting(shouldSprint);
+            }
         });
 
         HudRenderCallback.EVENT.register((drawContext, tickCounter) -> {
