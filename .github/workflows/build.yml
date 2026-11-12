@@ -45,20 +45,11 @@ jobs:
           cp DIPXScreen.java "$SOURCE_ROOT/gui/DIPXScreen.java"
           echo "Project: $PROJECT"
           echo "Source root: $SOURCE_ROOT"
-          mkdir -p /tmp/dipx-inspect
-          find "$PROJECT" -path '*/com/dipx/client/module/*.java' -type f -exec cp --parents {} /tmp/dipx-inspect/ \;
-          find "$PROJECT" -path '*/com/dipx/client/gui/*.java' -type f -exec cp --parents {} /tmp/dipx-inspect/ \;
-          tar -czf /tmp/dipx-module-sources.tgz -C /tmp/dipx-inspect .
           find "$PROJECT" -path '*/com/dipx/client/*.java' -o -path '*/com/dipx/client/gui/*.java'
           gradle -p "$PROJECT" build --no-daemon
           mkdir -p dist
           find "$PROJECT/build/libs" -maxdepth 1 -name '*.jar' -type f -exec cp {} dist/ \;
           test -n "$(find dist -maxdepth 1 -name '*.jar' -print -quit)"
-      - name: Upload module source inspection
-        uses: actions/upload-artifact@v4
-        with:
-          name: DIPX-Module-Source-Inspection
-          path: /tmp/dipx-module-sources.tgz
       - name: Verify remapped client JAR
         shell: bash
         run: |
