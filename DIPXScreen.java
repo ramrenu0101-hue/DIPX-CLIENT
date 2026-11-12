@@ -9,6 +9,8 @@ import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.text.Text;
 
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public final class DIPXScreen extends Screen {
     private ModuleCategory selected = ModuleCategory.CRYSTAL_PVP;
@@ -18,6 +20,7 @@ public final class DIPXScreen extends Screen {
     private static final int DESIGN_W = 430;
     private static final int DESIGN_H = 270;
     private static final int NAV_W = 104;
+    private static final Logger LOGGER = LoggerFactory.getLogger("DIPX/GUI");
 
     public DIPXScreen() {
         super(Text.literal("DIPX CLIENT"));
@@ -37,10 +40,10 @@ public final class DIPXScreen extends Screen {
 
     @Override
     public void render(DrawContext ctx, int mouseX, int mouseY, float delta) {
-        // Avoid vanilla blur/background post-processing: it can flash white or fail on
-        // mobile OpenGL renderers. DIPX draws its own opaque backdrop instead.
-        ctx.fill(0, 0, width, height, 0xB0000000);
+        // Keep every renderer call inside the guard. Some mobile GL drivers throw
+        // during the first fill after a screen transition, before panel drawing starts.
         try {
+        ctx.fill(0, 0, width, height, 0xB0000000);
         int x = left(), y = top(), w = panelW(), h = panelH(), nav = navW();
 
         ctx.fill(x, y, x + w, y + h, 0xF0141420);
@@ -95,14 +98,10 @@ public final class DIPXScreen extends Screen {
                 contentX, y + h - 17, 0xFF9992A6, false);
         // No vanilla widget pass is needed; this screen uses direct touch hitboxes only.
         } catch (RuntimeException renderError) {
-            // Keep the screen open and provide a visible diagnostic instead of crashing
-            // the entire client on a renderer-specific GUI operation.
-            ctx.fill(0, 0, width, height, 0xE0101018);
-            ctx.fill(8, 8, width - 8, height - 8, 0xFF201D2B);
-            ctx.drawText(textRenderer, "DIPX CLIENT - SAFE MODE", 16, 18, 0xFFE4CEFF, false);
-            ctx.drawText(textRenderer, "GUI render error: " + renderError.getClass().getSimpleName(),
-                    16, 34, 0xFFFF8B8B, false);
-            ctx.drawText(textRenderer, "Please report this diagnostic.", 16, 50, 0xFFB8B2C4, false);
+            // Do not issue more DrawContext calls after a renderer failure: on mobile
+            // OpenGL those fallback calls can trigger the same crash again.
+            LOGGER.error("DIPX GUI render failed; suppressing this frame to keep the client alive",
+                    renderError);
         }
     }
 
