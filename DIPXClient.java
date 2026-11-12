@@ -11,6 +11,7 @@ import net.minecraft.client.util.InputUtil;
 import net.minecraft.text.Text;
 import org.lwjgl.glfw.GLFW;
 
+/** DIPX client bootstrap: keep HUD registration independent of screen initialization. */
 public final class DIPXClient implements ClientModInitializer {
     private static KeyBinding openGui;
 
