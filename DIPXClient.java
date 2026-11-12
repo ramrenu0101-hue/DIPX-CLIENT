@@ -9,6 +9,9 @@ import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
 import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
 import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.util.InputUtil;
+import net.minecraft.entity.Entity;
+import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.util.hit.EntityHitResult;
 import net.minecraft.item.Items;
 import net.minecraft.text.Text;
 import org.lwjgl.glfw.GLFW;
@@ -79,6 +82,33 @@ public final class DIPXClient implements ClientModInitializer {
                 drawContext.drawText(client.textRenderer, Text.literal("Wind Charges: " + charges),
                         x, y, 0xFF8DEBFF, true);
                 y += 12;
+            }
+
+
+            if (enabled("Armor HUD")) {
+                StringBuilder armor = new StringBuilder("Armor: ");
+                boolean hasArmor = false;
+                for (var stack : client.player.getArmorItems()) {
+                    if (!stack.isEmpty()) {
+                        if (hasArmor) armor.append(" | ");
+                        int remaining = stack.getMaxDamage() - stack.getDamage();
+                        armor.append(stack.getName().getString()).append(" ")
+                                .append(remaining).append("/").append(stack.getMaxDamage());
+                        hasArmor = true;
+                    }
+                }
+                if (!hasArmor) armor.append("none");
+                drawContext.drawText(client.textRenderer, Text.literal(armor.toString()),
+                        x, y, 0xFFC7F7D4, true);
+                y += 12;
+            }
+
+            if (enabled("Target Info HUD") && client.crosshairTarget instanceof EntityHitResult hit) {
+                Entity target = hit.getEntity();
+                String targetLine = target.getName().getString()
+                        + "  " + String.format(java.util.Locale.ROOT, "%.1fm", client.player.distanceTo(target));
+                drawContext.drawText(client.textRenderer, Text.literal(targetLine),
+                        x, y, 0xFFFFC0E8, true);
             }
 
             if (enabled("Mace Smash HUD")) {
