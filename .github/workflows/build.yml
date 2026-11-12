@@ -1,38 +1,45 @@
-
 name: Build DIPX Client
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - 'codex/**'
+    paths:
+      - 'DIPXClient.java'
+      - 'DIPXScreen.java'
+      - '.github/workflows/build.yml'
 
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Download source
+      - name: Checkout source
         uses: actions/checkout@v4
-
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '21'
-
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.2.0'
-
-      - name: Extract source
+      - name: Extract and overlay maintained sources
+        shell: bash
         run: |
+          set -euo pipefail
           mkdir -p /tmp/dipx
           unzip -q DIPX-Client-source-ready.zip -d /tmp/dipx
-          PROJECT=$(find /tmp/dipx -name build.gradle -printf '%h\n' | head -1)
+          PROJECT="$(find /tmp/dipx -name build.gradle -printf '%h\n' | head -1)"
           test -n "$PROJECT"
+          mkdir -p "$PROJECT/src/main/java/com/dipx/client/gui"
+          cp DIPXClient.java "$PROJECT/src/main/java/com/dipx/client/DIPXClient.java"
+          cp DIPXScreen.java "$PROJECT/src/main/java/com/dipx/client/gui/DIPXScreen.java"
           gradle -p "$PROJECT" build --no-daemon
           mkdir -p dist
-          find "$PROJECT/build/libs" -name '*.jar' -type f -exec cp {} dist/ \;
-
+          find "$PROJECT/build/libs" -maxdepth 1 -name '*.jar' -type f -exec cp {} dist/ \;
+          test -n "$(find dist -maxdepth 1 -name '*.jar' -print -quit)"
       - name: Upload JAR
         uses: actions/upload-artifact@v4
         with:
