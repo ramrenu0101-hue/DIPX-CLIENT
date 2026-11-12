@@ -16,11 +16,14 @@ import net.minecraft.util.hit.EntityHitResult;
 import net.minecraft.item.Items;
 import net.minecraft.text.Text;
 import org.lwjgl.glfw.GLFW;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /** DIPX client bootstrap and lightweight, client-side PvP information HUDs. */
 public final class DIPXClient implements ClientModInitializer {
     private static KeyBinding openGui;
     private static Double originalGamma;
+    private static final Logger LOGGER = LoggerFactory.getLogger("DIPX/Client");
 
     private static boolean enabled(String name) {
         for (DIPXModule module : ModuleRegistry.all()) {
@@ -32,6 +35,7 @@ public final class DIPXClient implements ClientModInitializer {
     @Override
     public void onInitializeClient() {
         ModuleRegistry.registerDefaults();
+        LOGGER.info("DIPX initialized: {} modules registered", ModuleRegistry.all().size());
 
         openGui = KeyBindingHelper.registerKeyBinding(new KeyBinding(
                 "key.dipx.open_gui",
@@ -50,9 +54,19 @@ public final class DIPXClient implements ClientModInitializer {
             boolean guiPressed = false;
             while (openGui.wasPressed()) guiPressed = true;
             if (guiPressed && client.currentScreen instanceof DIPXScreen) {
-                client.setScreen(null);
+                try {
+                    client.setScreen(null);
+                    LOGGER.info("DIPX GUI closed");
+                } catch (RuntimeException screenError) {
+                    LOGGER.error("Failed to close DIPX GUI", screenError);
+                }
             } else if (guiPressed && client.currentScreen == null) {
-                client.setScreen(new DIPXScreen());
+                try {
+                    client.setScreen(new DIPXScreen());
+                    LOGGER.info("DIPX GUI opened; {} modules available", ModuleRegistry.all().size());
+                } catch (RuntimeException screenError) {
+                    LOGGER.error("Failed to open DIPX GUI", screenError);
+                }
             }
 
             // Toggle Sprint: client-side convenience; only engages while moving forward.
@@ -73,7 +87,7 @@ public final class DIPXClient implements ClientModInitializer {
             int x = 8;
             int y = 8;
             drawContext.drawText(client.textRenderer,
-                    Text.literal("DIPX  |  " + active + "/" + total + " enabled"),
+                    Text.literal("DIPX  |  " + total + " modules  |  " + active + " ON"),
                     x, y, 0xFFB58CFF, true);
             y += 12;
 
