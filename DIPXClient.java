@@ -1,4 +1,3 @@
-
 package com.dipx.client;
 
 import com.dipx.client.gui.DIPXScreen;
@@ -28,25 +27,25 @@ public final class DIPXClient implements ClientModInitializer {
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             while (openGui.wasPressed()) {
-                client.setScreen(new DIPXScreen());
+                if (client.currentScreen instanceof DIPXScreen) {
+                    client.setScreen(null);
+                } else if (client.currentScreen == null) {
+                    client.setScreen(new DIPXScreen());
+                }
             }
         });
 
         HudRenderCallback.EVENT.register((drawContext, tickCounter) -> {
-            if (clientReady()) {
-                var client = net.minecraft.client.MinecraftClient.getInstance();
+            var client = net.minecraft.client.MinecraftClient.getInstance();
+            if (client == null || client.player == null || client.options == null) return;
 
-                drawContext.drawText(
-                        client.textRenderer,
-                        Text.literal("DIPX  ?7|  " + ModuleRegistry.enabledCount() + " modules"),
-                        8, 8, 0xFFB58CFF, true
-                );
-            }
+            int total = ModuleRegistry.all().size();
+            int enabled = ModuleRegistry.enabledCount();
+            drawContext.drawText(
+                    client.textRenderer,
+                    Text.literal("DIPX  |  " + enabled + "/" + total + " modules"),
+                    8, 8, 0xFFB58CFF, true
+            );
         });
-    }
-
-    private static boolean clientReady() {
-        var c = net.minecraft.client.MinecraftClient.getInstance();
-        return c != null && c.player != null && c.options != null;
     }
 }
