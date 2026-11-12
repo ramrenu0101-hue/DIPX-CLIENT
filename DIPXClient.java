@@ -41,7 +41,7 @@ public final class DIPXClient implements ClientModInitializer {
             if (client == null || client.player == null || client.options == null) return;
 
             int total = ModuleRegistry.all().size();
-            int enabled = ModuleRegistry.enabledCount();
+            long enabled = ModuleRegistry.enabledCount();
             drawContext.drawText(
                     client.textRenderer,
                     Text.literal("DIPX  |  " + enabled + "/" + total + " modules"),
