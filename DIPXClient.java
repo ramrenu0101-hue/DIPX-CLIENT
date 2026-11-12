@@ -20,6 +20,7 @@ import org.lwjgl.glfw.GLFW;
 /** DIPX client bootstrap and lightweight, client-side PvP information HUDs. */
 public final class DIPXClient implements ClientModInitializer {
     private static KeyBinding openGui;
+    private static Double originalGamma;
 
     private static boolean enabled(String name) {
         for (DIPXModule module : ModuleRegistry.all()) {
@@ -40,6 +41,10 @@ public final class DIPXClient implements ClientModInitializer {
         ));
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
+            if (client.options != null) {
+                if (originalGamma == null) originalGamma = client.options.getGamma().getValue();
+                client.options.getGamma().setValue(enabled("FullBright") ? 16.0 : originalGamma);
+            }
             while (openGui.wasPressed()) {
                 if (client.currentScreen instanceof DIPXScreen) {
                     client.setScreen(null);
