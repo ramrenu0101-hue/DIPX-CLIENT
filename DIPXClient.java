@@ -82,7 +82,7 @@ public final class DIPXClient implements ClientModInitializer {
             }
 
             if (enabled("Mace Smash HUD")) {
-                float fall = client.player.fallDistance;
+                double fall = client.player.fallDistance;
                 drawContext.drawText(client.textRenderer,
                         Text.literal(String.format(java.util.Locale.ROOT, "Fall: %.1f blocks", fall)),
                         x, y, 0xFFFF9B75, true);
