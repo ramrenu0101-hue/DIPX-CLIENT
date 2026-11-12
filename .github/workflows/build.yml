@@ -50,6 +50,33 @@ jobs:
           mkdir -p dist
           find "$PROJECT/build/libs" -maxdepth 1 -name '*.jar' -type f -exec cp {} dist/ \;
           test -n "$(find dist -maxdepth 1 -name '*.jar' -print -quit)"
+      - name: Verify remapped client JAR
+        shell: bash
+        run: |
+          set -euo pipefail
+          JAR="$(find dist -maxdepth 1 -name '*.jar' ! -name '*sources.jar' -print -quit)"
+          test -n "$JAR"
+          jar tf "$JAR" | grep -q '^fabric.mod.json        uses: actions/upload-artifact@v4
+        with:
+          name: DIPX-Client-JAR
+          path: dist/*.jar
+
+          jar tf "$JAR" | grep -q '^com/dipx/client/DIPXClient.class        uses: actions/upload-artifact@v4
+        with:
+          name: DIPX-Client-JAR
+          path: dist/*.jar
+
+          jar tf "$JAR" | grep -q '^com/dipx/client/gui/DIPXScreen.class        uses: actions/upload-artifact@v4
+        with:
+          name: DIPX-Client-JAR
+          path: dist/*.jar
+
+          jar tf "$JAR" | grep -q '^com/dipx/client/module/ModuleRegistry.class        uses: actions/upload-artifact@v4
+        with:
+          name: DIPX-Client-JAR
+          path: dist/*.jar
+
+          unzip -p "$JAR" fabric.mod.json | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["id"] == "dipx"; assert d["depends"]["minecraft"] == "=1.21.11"; assert "com.dipx.client.DIPXClient" in d["entrypoints"]["client"]; print("Verified DIPX Fabric metadata and required classes")'
       - name: Upload JAR
         uses: actions/upload-artifact@v4
         with:
