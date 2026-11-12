@@ -45,12 +45,14 @@ public final class DIPXClient implements ClientModInitializer {
                 if (originalGamma == null) originalGamma = client.options.getGamma().getValue();
                 client.options.getGamma().setValue(enabled("FullBright") ? 16.0 : originalGamma);
             }
-            while (openGui.wasPressed()) {
-                if (client.currentScreen instanceof DIPXScreen) {
-                    client.setScreen(null);
-                } else if (client.currentScreen == null) {
-                    client.setScreen(new DIPXScreen());
-                }
+            // Mobile launchers/keyboards can enqueue more than one press for a
+            // single tap. Drain the queue, then toggle at most once per tick.
+            boolean guiPressed = false;
+            while (openGui.wasPressed()) guiPressed = true;
+            if (guiPressed && client.currentScreen instanceof DIPXScreen) {
+                client.setScreen(null);
+            } else if (guiPressed && client.currentScreen == null) {
+                client.setScreen(new DIPXScreen());
             }
 
             // Toggle Sprint: client-side convenience; only engages while moving forward.
