@@ -37,7 +37,10 @@ public final class DIPXScreen extends Screen {
 
     @Override
     public void render(DrawContext ctx, int mouseX, int mouseY, float delta) {
-        renderBackground(ctx, mouseX, mouseY, delta);
+        // Avoid vanilla blur/background post-processing: it can flash white or fail on
+        // mobile OpenGL renderers. DIPX draws its own opaque backdrop instead.
+        ctx.fill(0, 0, width, height, 0xB0000000);
+        try {
         int x = left(), y = top(), w = panelW(), h = panelH(), nav = navW();
 
         ctx.fill(x, y, x + w, y + h, 0xF0141420);
@@ -90,7 +93,17 @@ public final class DIPXScreen extends Screen {
         String footer = "MODULES " + (modulePage + 1) + "/" + pages + "   •   ESC CLOSE";
         ctx.drawText(textRenderer, textRenderer.trimToWidth(footer, contentW),
                 contentX, y + h - 17, 0xFF9992A6, false);
-        super.render(ctx, mouseX, mouseY, delta);
+        // No vanilla widget pass is needed; this screen uses direct touch hitboxes only.
+        } catch (RuntimeException renderError) {
+            // Keep the screen open and provide a visible diagnostic instead of crashing
+            // the entire client on a renderer-specific GUI operation.
+            ctx.fill(0, 0, width, height, 0xE0101018);
+            ctx.fill(8, 8, width - 8, height - 8, 0xFF201D2B);
+            ctx.drawText(textRenderer, "DIPX CLIENT - SAFE MODE", 16, 18, 0xFFE4CEFF, false);
+            ctx.drawText(textRenderer, "GUI render error: " + renderError.getClass().getSimpleName(),
+                    16, 34, 0xFFFF8B8B, false);
+            ctx.drawText(textRenderer, "Please report this diagnostic.", 16, 50, 0xFFB8B2C4, false);
+        }
     }
 
     @Override
