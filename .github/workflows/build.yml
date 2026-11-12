@@ -50,6 +50,12 @@ jobs:
           mkdir -p dist
           find "$PROJECT/build/libs" -maxdepth 1 -name '*.jar' -type f -exec cp {} dist/ \;
           test -n "$(find dist -maxdepth 1 -name '*.jar' -print -quit)"
+          # Preserve the actual compiled source tree for diagnosis of runtime
+          # module registration and GUI behavior; this is not a release artifact.
+          mkdir -p diagnostics
+          cp -R "$SOURCE_ROOT" diagnostics/client-source
+          cp -R "$PROJECT/src/main/resources" diagnostics/resources 2>/dev/null || true
+          zip -qr dist/DIPX-source-diagnostic.zip diagnostics
       - name: Verify remapped client JAR
         shell: bash
         run: |
@@ -66,3 +72,8 @@ jobs:
         with:
           name: DIPX-Client-JAR
           path: dist/*.jar
+      - name: Upload source diagnostics
+        uses: actions/upload-artifact@v4
+        with:
+          name: DIPX-Source-Diagnostic
+          path: dist/DIPX-source-diagnostic.zip
