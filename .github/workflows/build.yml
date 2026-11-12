@@ -9,6 +9,7 @@ on:
       - 'DIPXClient.java'
       - 'DIPXScreen.java'
       - '.github/workflows/build.yml'
+      - 'DIPX-Client-source-ready.zip'
 
 jobs:
   build:
@@ -33,9 +34,18 @@ jobs:
           unzip -q DIPX-Client-source-ready.zip -d /tmp/dipx
           PROJECT="$(find /tmp/dipx -name build.gradle -printf '%h\n' | head -1)"
           test -n "$PROJECT"
-          mkdir -p "$PROJECT/src/main/java/com/dipx/client/gui"
-          cp DIPXClient.java "$PROJECT/src/main/java/com/dipx/client/DIPXClient.java"
-          cp DIPXScreen.java "$PROJECT/src/main/java/com/dipx/client/gui/DIPXScreen.java"
+          SOURCE_FILE="$(find "$PROJECT" -path '*/com/dipx/client/DIPXClient.java' -print -quit)"
+          if [ -n "$SOURCE_FILE" ]; then
+            SOURCE_ROOT="$(dirname "$SOURCE_FILE")"
+          else
+            SOURCE_ROOT="$PROJECT/src/main/java/com/dipx/client"
+          fi
+          mkdir -p "$SOURCE_ROOT/gui"
+          cp DIPXClient.java "$SOURCE_ROOT/DIPXClient.java"
+          cp DIPXScreen.java "$SOURCE_ROOT/gui/DIPXScreen.java"
+          echo "Project: $PROJECT"
+          echo "Source root: $SOURCE_ROOT"
+          find "$PROJECT" -path '*/com/dipx/client/*.java' -o -path '*/com/dipx/client/gui/*.java'
           gradle -p "$PROJECT" build --no-daemon
           mkdir -p dist
           find "$PROJECT/build/libs" -maxdepth 1 -name '*.jar' -type f -exec cp {} dist/ \;
