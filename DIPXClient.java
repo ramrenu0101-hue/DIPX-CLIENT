@@ -73,7 +73,7 @@ public final class DIPXClient implements ClientModInitializer {
             int x = 8;
             int y = 8;
             drawContext.drawText(client.textRenderer,
-                    Text.literal("DIPX  |  " + total + " modules  |  " + active + " enabled"),
+                    Text.literal("DIPX  |  " + active + "/" + total + " enabled"),
                     x, y, 0xFFB58CFF, true);
             y += 12;
 
