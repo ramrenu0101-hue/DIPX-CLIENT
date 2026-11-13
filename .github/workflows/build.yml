@@ -103,7 +103,7 @@ jobs:
       - name: Launch Minecraft and capture the real DIPX GUI
         id: gui-smoke
         continue-on-error: true
-        run: timeout 210s xvfb-run -a -s "-screen 0 1280x720x24 +extension GLX" bash ci/gui-smoke.sh
+        run: timeout --signal=TERM --kill-after=5s 180s xvfb-run -a -s "-screen 0 1280x720x24 +extension GLX" bash ci/gui-smoke.sh
       - name: Upload JAR
         uses: actions/upload-artifact@v4
         with:

@@ -16,6 +16,7 @@ gradle -p "$DIPX_PROJECT" runClient --no-daemon >"$LOG" 2>&1 &
 GRADLE_PID=$!
 
 cleanup() {
+  pkill -TERM -f 'net.fabricmc.devlaunchinjector.Main' 2>/dev/null || true
   if kill -0 "$GRADLE_PID" 2>/dev/null; then
     pkill -TERM -P "$GRADLE_PID" 2>/dev/null || true
     kill -TERM "$GRADLE_PID" 2>/dev/null || true
@@ -23,11 +24,12 @@ cleanup() {
   if [[ -n "$OPENBOX_PID" ]] && kill -0 "$OPENBOX_PID" 2>/dev/null; then
     kill -TERM "$OPENBOX_PID" 2>/dev/null || true
   fi
+  cp /tmp/dipx-openbox.log gui-smoke/openbox.log 2>/dev/null || true
 }
 trap cleanup EXIT
 
 WINDOW=""
-for attempt in $(seq 1 90); do
+for attempt in $(seq 1 45); do
   WINDOW="$(xdotool search --name 'Minecraft' 2>/dev/null | head -n 1 || true)"
   if [[ -z "$WINDOW" ]]; then
     WINDOW="$(wmctrl -l 2>/dev/null | awk 'NR==1 {print $1}' || true)"
@@ -45,14 +47,15 @@ done
 
 if [[ -z "$WINDOW" ]] || ! grep -q "DIPX initialized" "$LOG"; then
   echo "Minecraft client did not reach the DIPX initialized state."
-  wmctrl -l 2>/dev/null || true
-  xwininfo -root -tree 2>/dev/null || true
+  wmctrl -l 2>&1 | tee gui-smoke/window-debug.txt || true
+  xwininfo -root -tree 2>&1 | tee -a gui-smoke/window-debug.txt || true
+  cat /tmp/dipx-openbox.log 2>/dev/null | tee -a gui-smoke/window-debug.txt || true
   tail -n 180 "$LOG"
   exit 1
 fi
-echo "Minecraft window: $(xdotool getwindowname "$WINDOW" 2>/dev/null || echo unknown)"
+echo "Minecraft window: $(xdotool getwindowname "$WINDOW" 2>/dev/null || echo unknown)" | tee -a gui-smoke/smoke-status.txt
 
-for attempt in $(seq 1 60); do
+for attempt in $(seq 1 30); do
   if grep -q "minecraft:textures/atlas/gui.png-atlas" "$LOG"; then
     break
   fi
@@ -86,5 +89,5 @@ if grep -q "DIPX GUI render failed" "$LOG"; then
   exit 1
 fi
 
-echo "Captured genuine running DIPX GUI screenshot: gui-smoke/DIPX-GUI.png"
-echo "Screenshot unique colors: $COLOR_COUNT"
+echo "Captured genuine running DIPX GUI screenshot: gui-smoke/DIPX-GUI.png" | tee -a gui-smoke/smoke-status.txt
+echo "Screenshot unique colors: $COLOR_COUNT" | tee -a gui-smoke/smoke-status.txt
