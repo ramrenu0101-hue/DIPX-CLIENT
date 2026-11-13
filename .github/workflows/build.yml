@@ -90,6 +90,8 @@ jobs:
           jar tf "$JAR" | grep -q com/dipx/client/gui/DIPXLayout.class
           jar tf "$JAR" | grep -q com/dipx/client/module/ModuleRegistry.class
           grep -q "private ModuleCategory selected = ModuleCategory.COMBAT;" DIPXScreen.java
+          grep -q "client.currentScreen instanceof TitleScreen" DIPXClient.java
+          grep -q "DIPXClient.closeGui()" DIPXScreen.java
           test "$(grep -c 'add(pending,' ModuleRegistry.java)" -eq 12
           unzip -p "$JAR" fabric.mod.json | python3 -c "import json,sys; d=json.load(sys.stdin); assert d['id']=='dipx'; assert d['depends']['minecraft']=='=1.21.11'; assert 'com.dipx.client.DIPXClient' in d['entrypoints']['client']; print('Verified DIPX Fabric metadata and required classes')"
       - name: Prepare virtual display for real GUI smoke test

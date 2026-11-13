@@ -1,5 +1,6 @@
 package com.dipx.client.gui;
 
+import com.dipx.client.DIPXClient;
 import com.dipx.client.module.DIPXModule;
 import com.dipx.client.module.ModuleCategory;
 import com.dipx.client.module.ModuleRegistry;
@@ -239,6 +240,11 @@ public final class DIPXScreen extends Screen {
             return true;
         }
         return super.mouseClicked(click, doubled);
+    }
+
+    @Override
+    public void close() {
+        DIPXClient.closeGui();
     }
 
     @Override

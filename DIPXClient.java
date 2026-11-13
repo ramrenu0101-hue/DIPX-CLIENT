@@ -7,6 +7,9 @@ import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
 import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
+import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.gui.screen.Screen;
+import net.minecraft.client.gui.screen.TitleScreen;
 import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.util.InputUtil;
 import net.minecraft.entity.Entity;
@@ -24,6 +27,7 @@ import org.slf4j.LoggerFactory;
 public final class DIPXClient implements ClientModInitializer {
     private static KeyBinding openGui;
     private static Double originalGamma;
+    private static Screen previousScreen;
     private static final Logger LOGGER = LoggerFactory.getLogger("DIPX/Client");
 
     private static boolean enabled(String name) {
@@ -31,6 +35,17 @@ public final class DIPXClient implements ClientModInitializer {
             if (module.name().equals(name)) return module.enabled();
         }
         return false;
+    }
+
+    /** Restores the screen that was visible before DIPX was opened. */
+    public static void closeGui() {
+        MinecraftClient client = MinecraftClient.getInstance();
+        if (client != null && client.currentScreen instanceof DIPXScreen) {
+            Screen restore = previousScreen;
+            previousScreen = null;
+            client.setScreen(restore);
+            LOGGER.info("DIPX GUI closed");
+        }
     }
 
     @Override
@@ -56,16 +71,18 @@ public final class DIPXClient implements ClientModInitializer {
             while (openGui.wasPressed()) guiPressed = true;
             if (guiPressed && client.currentScreen instanceof DIPXScreen) {
                 try {
-                    client.setScreen(null);
-                    LOGGER.info("DIPX GUI closed");
+                    closeGui();
                 } catch (RuntimeException screenError) {
                     LOGGER.error("Failed to close DIPX GUI", screenError);
                 }
-            } else if (guiPressed && client.currentScreen == null) {
+            } else if (guiPressed && (client.currentScreen == null
+                    || client.currentScreen instanceof TitleScreen)) {
                 try {
+                    previousScreen = client.currentScreen;
                     client.setScreen(new DIPXScreen());
                     LOGGER.info("DIPX GUI opened; {} modules available", ModuleRegistry.all().size());
                 } catch (RuntimeException screenError) {
+                    previousScreen = null;
                     LOGGER.error("Failed to open DIPX GUI", screenError);
                 }
             }
