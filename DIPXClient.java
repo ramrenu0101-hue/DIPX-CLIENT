@@ -151,6 +151,13 @@ public final class DIPXClient implements ClientModInitializer {
                 y += 12;
             }
 
+            if (enabled("Spear Inventory HUD")) {
+                int spears = client.player.getInventory().count(Items.SPEAR);
+                drawContext.drawText(client.textRenderer, Text.literal("Spears: " + spears),
+                        x, y, 0xFF9CE8FF, true);
+                y += 12;
+            }
+
             if (enabled("Weapon Swap HUD")) {
                 String held = client.player.getMainHandStack().isEmpty()
                         ? "Empty" : client.player.getMainHandStack().getName().getString();
