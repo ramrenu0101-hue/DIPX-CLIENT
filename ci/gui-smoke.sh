@@ -11,7 +11,7 @@ unset WAYLAND_DISPLAY
 
 echo "Launcher DISPLAY=${DISPLAY:-unset}" | tee -a gui-smoke/smoke-status.txt
 timeout 8s xdpyinfo -display "${DISPLAY:?DISPLAY is required}" > gui-smoke/launcher-display.txt 2>&1
-timeout 8s glxinfo -B > gui-smoke/launcher-glxinfo.txt 2>&1
+timeout 8s glxinfo -B > gui-smoke/launcher-glxinfo.txt 2>&1 || echo "Launcher GLX probe timed out; continuing to game launch." | tee -a gui-smoke/smoke-status.txt
 
 timeout 15s gradle --stop >/dev/null 2>&1 || echo "Gradle daemon stop timed out" | tee -a gui-smoke/smoke-status.txt
 gradle -p "$DIPX_PROJECT" runClient --no-daemon --console=plain >"$LOG" 2>&1 &
@@ -62,7 +62,7 @@ export DISPLAY="$GAME_DISPLAY"
 if [[ -n "$GAME_XAUTHORITY" ]]; then export XAUTHORITY="$GAME_XAUTHORITY"; fi
 echo "Minecraft PID=$GAME_PID DISPLAY=$DISPLAY XAUTHORITY=${XAUTHORITY:-unset}" | tee -a gui-smoke/smoke-status.txt
 timeout 8s xdpyinfo -display "$DISPLAY" > gui-smoke/game-display.txt 2>&1
-timeout 8s glxinfo -B > gui-smoke/game-glxinfo.txt 2>&1
+timeout 8s glxinfo -B > gui-smoke/game-glxinfo.txt 2>&1 || echo "Game GLX probe timed out; window/render smoke test remains authoritative." | tee -a gui-smoke/smoke-status.txt
 
 openbox --sm-disable >/tmp/dipx-openbox.log 2>&1 &
 OPENBOX_PID=$!
