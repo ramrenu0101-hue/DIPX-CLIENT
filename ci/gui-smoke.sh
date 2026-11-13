@@ -104,27 +104,26 @@ xdotool windowraise "$WINDOW" 2>/dev/null || true
 xdotool windowactivate --sync "$WINDOW" 2>/dev/null || true
 xdotool windowfocus --sync "$WINDOW"
 echo "Focused X11 window=$WINDOW active=$(xdotool getwindowfocus 2>/dev/null || echo unknown)" | tee -a gui-smoke/smoke-status.txt
-xdotool keydown --window "$WINDOW" --clearmodifiers Shift_R || true
-sleep 0.5
-xdotool keyup --window "$WINDOW" Shift_R || true
-sleep 4
-if ! grep -q "DIPX GUI opened" "$LOG"; then
-  echo "Right Shift event not observed yet; waiting for the opt-in smoke fallback." | tee -a gui-smoke/smoke-status.txt
-  for attempt in $(seq 1 30); do
-    if grep -q "DIPX GUI opened" "$LOG"; then break; fi
-    sleep 1
-  done
-fi
-if ! grep -q "DIPX GUI opened" "$LOG"; then
-  echo "DIPX smoke harness did not open the GUI."
+# Use XTest (global key events), not XSendEvent's --window path. GLFW
+# ignores synthetic XSendEvent keyboard messages on this Linux runner.
+xdotool keydown --clearmodifiers Shift_R
+sleep 0.2
+xdotool keyup Shift_R
+for attempt in $(seq 1 12); do
+  if grep -q "DIPX Right Shift received" "$LOG" && grep -q "DIPX GUI opened" "$LOG"; then break; fi
+  sleep 1
+done
+if ! grep -q "DIPX Right Shift received" "$LOG"; then
+  echo "DIPX did not receive the real Right Shift key event."
   tail -n 180 "$LOG"
   exit 1
 fi
-if grep -q "DIPX Right Shift received" "$LOG"; then
-  echo "Right Shift keybind event reached DIPX." | tee -a gui-smoke/smoke-status.txt
-else
-  echo "Right Shift X11 injection was not observed; the real screen opened through the smoke-only fallback." | tee -a gui-smoke/smoke-status.txt
+if ! grep -q "DIPX GUI opened" "$LOG"; then
+  echo "Right Shift reached DIPX but did not open the GUI."
+  tail -n 180 "$LOG"
+  exit 1
 fi
+echo "Right Shift keybind opened the real DIPX screen." | tee -a gui-smoke/smoke-status.txt
 if grep -q "DIPX GUI render failed" "$LOG"; then
   echo "DIPX reported a GUI rendering exception."
   tail -n 100 "$LOG"
@@ -145,10 +144,10 @@ if grep -q "DIPX GUI closed" "$LOG"; then
   echo "DIPX GUI closed unexpectedly while idle."
   exit 1
 fi
-xdotool keydown --window "$WINDOW" --clearmodifiers Shift_R || true
-sleep 0.5
-xdotool keyup --window "$WINDOW" Shift_R || true
-for attempt in $(seq 1 35); do
+xdotool keydown --clearmodifiers Shift_R
+sleep 0.2
+xdotool keyup Shift_R
+for attempt in $(seq 1 12); do
   if grep -q "DIPX GUI closed" "$LOG"; then break; fi
   sleep 1
 done
