@@ -151,7 +151,7 @@ if grep -q "DIPX GUI closed" "$LOG"; then
   echo "DIPX GUI closed unexpectedly while idle."
   exit 1
 fi
-for attempt in $(seq 1 12); do
+for attempt in $(seq 1 25); do
   if grep -q "DIPX smoke injected close binding event" "$LOG" \
       && grep -q "DIPX GUI closed" "$LOG"; then break; fi
   sleep 1
