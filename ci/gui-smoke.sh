@@ -10,13 +10,13 @@ export ALSOFT_DRIVERS=null
 unset WAYLAND_DISPLAY
 
 echo "DISPLAY=$DISPLAY" | tee -a gui-smoke/smoke-status.txt
-xdpyinfo -display "$DISPLAY" > gui-smoke/xdpyinfo.txt 2>&1
-glxinfo -B > gui-smoke/glxinfo.txt 2>&1 || true
+timeout 8s xdpyinfo -display "$DISPLAY" > gui-smoke/xdpyinfo.txt 2>&1 || echo "xdpyinfo timed out or failed" | tee -a gui-smoke/smoke-status.txt
+timeout 8s glxinfo -B > gui-smoke/glxinfo.txt 2>&1 || echo "glxinfo timed out or failed" | tee -a gui-smoke/smoke-status.txt
 
 openbox --sm-disable >/tmp/dipx-openbox.log 2>&1 &
 OPENBOX_PID=$!
 sleep 2
-gradle --stop >/dev/null 2>&1 || true
+timeout 15s gradle --stop >/dev/null 2>&1 || echo "Gradle daemon stop timed out" | tee -a gui-smoke/smoke-status.txt
 
 gradle -p "$DIPX_PROJECT" runClient --no-daemon --console=plain >"$LOG" 2>&1 &
 GRADLE_PID=$!
