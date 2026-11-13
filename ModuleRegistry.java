@@ -25,6 +25,7 @@ public final class ModuleRegistry {
         add("Target Info HUD", "Show crosshair target and distance", ModuleCategory.COMBAT);
         add("Mace Smash HUD", "Show current fall distance for smash timing", ModuleCategory.MACE_PVP);
         add("Mace Inventory HUD", "Count mace items available in inventory", ModuleCategory.MACE_PVP);
+        add("Spear Inventory HUD", "Count spears available in inventory", ModuleCategory.SPEAR_PVP);
         add("Breach Status HUD", "Show target player armor durability", ModuleCategory.COMBAT);
         add("Weapon Swap HUD", "Show held item and selected hotbar slot", ModuleCategory.COMBAT);
     }
