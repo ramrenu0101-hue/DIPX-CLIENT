@@ -30,15 +30,17 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# Loom may wrap runClient in its own xvfb-run. Read DISPLAY from the actual
-# Java game process, not from the wrapper shell, or input/capture can target
-# the outer X server while Minecraft is rendering on the nested one.
+# Loom may wrap runClient in its own xvfb-run. Read DISPLAY and XAUTHORITY
+# from the actual Java game process, not the wrapper shell, or input/capture
+# can target the outer X server or fail X11 authentication.
 GAME_PID=""
 GAME_DISPLAY=""
+GAME_XAUTHORITY=""
 for attempt in $(seq 1 75); do
   GAME_PID="$(ps -eo pid=,comm=,args= | awk '$2 == "java" && /net.fabricmc.devlaunchinjector.Main/ {print $1; exit}')"
   if [[ -n "$GAME_PID" && -r "/proc/$GAME_PID/environ" ]]; then
     GAME_DISPLAY="$(tr '\0' '\n' < "/proc/$GAME_PID/environ" | sed -n 's/^DISPLAY=//p' | head -n 1)"
+    GAME_XAUTHORITY="$(tr '\0' '\n' < "/proc/$GAME_PID/environ" | sed -n 's/^XAUTHORITY=//p' | head -n 1)"
     if [[ -n "$GAME_DISPLAY" ]]; then break; fi
   fi
   if ! kill -0 "$GRADLE_PID" 2>/dev/null; then
@@ -57,7 +59,8 @@ if [[ -z "$GAME_PID" || -z "$GAME_DISPLAY" ]]; then
 fi
 
 export DISPLAY="$GAME_DISPLAY"
-echo "Minecraft PID=$GAME_PID DISPLAY=$DISPLAY" | tee -a gui-smoke/smoke-status.txt
+if [[ -n "$GAME_XAUTHORITY" ]]; then export XAUTHORITY="$GAME_XAUTHORITY"; fi
+echo "Minecraft PID=$GAME_PID DISPLAY=$DISPLAY XAUTHORITY=${XAUTHORITY:-unset}" | tee -a gui-smoke/smoke-status.txt
 timeout 8s xdpyinfo -display "$DISPLAY" > gui-smoke/game-display.txt 2>&1
 timeout 8s glxinfo -B > gui-smoke/game-glxinfo.txt 2>&1
 
@@ -121,7 +124,6 @@ if [[ "$COLOR_COUNT" -lt 100 ]]; then
 fi
 echo "Captured genuine running DIPX GUI screenshot: gui-smoke/DIPX-GUI.png ($DIMENSIONS, $COLOR_COUNT colors)" | tee -a gui-smoke/smoke-status.txt
 
-# Verify the screen remains open and Right Shift closes it cleanly.
 sleep 2
 if grep -q "DIPX GUI closed" "$LOG"; then
   echo "DIPX GUI closed unexpectedly while idle."
