@@ -31,6 +31,7 @@ public final class DIPXClient implements ClientModInitializer {
     private static int smokeTicks;
     private static int smokeOpenTicks;
     private static boolean smokeModeLogged;
+    private static boolean smokeOnboardingDismissed;
     private static final Logger LOGGER = LoggerFactory.getLogger("DIPX/Client");
 
     private static boolean enabled(String name) {
@@ -68,6 +69,15 @@ public final class DIPXClient implements ClientModInitializer {
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             if (Boolean.getBoolean("dipx.smoke.gui")) {
+                // A fresh CI game directory shows the first-run accessibility
+                // onboarding screen. It captures keyboard focus, so dismiss it
+                // only in smoke mode before exercising the real Right Shift bind.
+                if (!smokeOnboardingDismissed && client.currentScreen != null
+                        && client.currentScreen.getClass().getSimpleName().equals("AccessibilityOnboardingScreen")) {
+                    client.setScreen(null);
+                    smokeOnboardingDismissed = true;
+                    LOGGER.info("DIPX smoke dismissed first-run accessibility onboarding");
+                }
                 if (!smokeModeLogged) {
                     String screenName = client.currentScreen == null
                             ? "none" : client.currentScreen.getClass().getSimpleName();
