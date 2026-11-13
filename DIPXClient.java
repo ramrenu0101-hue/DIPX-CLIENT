@@ -93,7 +93,7 @@ public final class DIPXClient implements ClientModInitializer {
                 }
                 if (smokeOpenInjected && client.currentScreen instanceof DIPXScreen) {
                     smokeOpenTicks++;
-                    if (smokeOpenTicks >= 100 && !smokeCloseInjected) {
+                    if (smokeOpenTicks >= 300 && !smokeCloseInjected) {
                         KeyBinding.onKeyPressed(openGui.getDefaultKey());
                         smokeCloseInjected = true;
                         LOGGER.info("DIPX smoke injected close binding event");
