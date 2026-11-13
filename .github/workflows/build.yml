@@ -71,6 +71,11 @@ jobs:
           jar tf "$JAR" | grep -q com/dipx/client/DIPXClient.class
           jar tf "$JAR" | grep -q com/dipx/client/gui/DIPXScreen.class
           jar tf "$JAR" | grep -q com/dipx/client/module/ModuleRegistry.class
+          # Regression guards: the first-open GUI category must contain the shipped combat modules,
+          # and the registry must not regress to the old placeholder list.
+          grep -q "private ModuleCategory selected = ModuleCategory.COMBAT;" DIPXScreen.java
+          ! grep -q "CRYSTAL_PVP" ModuleCategory.java
+          test "$(grep -c 'add("' ModuleRegistry.java)" -eq 8
           unzip -p "$JAR" fabric.mod.json | python3 -c "import json,sys; d=json.load(sys.stdin); assert d['id']=='dipx'; assert d['depends']['minecraft']=='=1.21.11'; assert 'com.dipx.client.DIPXClient' in d['entrypoints']['client']; print('Verified DIPX Fabric metadata and required classes')"
       - name: Upload JAR
         uses: actions/upload-artifact@v4
