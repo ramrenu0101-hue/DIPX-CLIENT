@@ -7,12 +7,18 @@ LOG="gui-smoke/runClient.log"
 export LIBGL_ALWAYS_SOFTWARE=1
 export MESA_GL_VERSION_OVERRIDE=4.5
 export ALSOFT_DRIVERS=null
+unset WAYLAND_DISPLAY
+
+echo "DISPLAY=$DISPLAY" | tee -a gui-smoke/smoke-status.txt
+xdpyinfo -display "$DISPLAY" > gui-smoke/xdpyinfo.txt 2>&1
+glxinfo -B > gui-smoke/glxinfo.txt 2>&1 || true
 
 openbox --sm-disable >/tmp/dipx-openbox.log 2>&1 &
 OPENBOX_PID=$!
 sleep 2
+gradle --stop >/dev/null 2>&1 || true
 
-gradle -p "$DIPX_PROJECT" runClient --no-daemon >"$LOG" 2>&1 &
+gradle -p "$DIPX_PROJECT" runClient --no-daemon --console=plain >"$LOG" 2>&1 &
 GRADLE_PID=$!
 
 cleanup() {
@@ -50,6 +56,11 @@ if [[ -z "$WINDOW" ]] || ! grep -q "DIPX initialized" "$LOG"; then
   wmctrl -l 2>&1 | tee gui-smoke/window-debug.txt || true
   xwininfo -root -tree 2>&1 | tee -a gui-smoke/window-debug.txt || true
   cat /tmp/dipx-openbox.log 2>/dev/null | tee -a gui-smoke/window-debug.txt || true
+  ps -eo pid,ppid,args | grep -E 'gradle|Minecraft|devlaunchinjector|openbox' | grep -v grep | tee -a gui-smoke/window-debug.txt || true
+  GAME_PID="$(pgrep -f 'net.fabricmc.devlaunchinjector.Main' | head -n 1 || true)"
+  if [[ -n "$GAME_PID" && -r "/proc/$GAME_PID/environ" ]]; then
+    tr '\0' '\n' < "/proc/$GAME_PID/environ" | grep -E '^(DISPLAY|WAYLAND_DISPLAY|XDG_RUNTIME_DIR)=' | tee -a gui-smoke/window-debug.txt || true
+  fi
   tail -n 180 "$LOG"
   exit 1
 fi

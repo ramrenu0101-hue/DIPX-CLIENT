@@ -96,9 +96,9 @@ jobs:
           unzip -p "$JAR" fabric.mod.json | python3 -c "import json,sys; d=json.load(sys.stdin); assert d['id']=='dipx'; assert d['depends']['minecraft']=='=1.21.11'; assert 'com.dipx.client.DIPXClient' in d['entrypoints']['client']; print('Verified DIPX Fabric metadata and required classes')"
       - name: Prepare virtual display for real GUI smoke test
         run: |
-          if ! command -v xvfb-run >/dev/null || ! command -v xdotool >/dev/null || ! command -v import >/dev/null || ! command -v openbox >/dev/null || ! command -v wmctrl >/dev/null; then
+          if ! command -v xvfb-run >/dev/null || ! command -v xdotool >/dev/null || ! command -v import >/dev/null || ! command -v openbox >/dev/null || ! command -v wmctrl >/dev/null || ! command -v glxinfo >/dev/null; then
             sudo apt-get update
-            sudo apt-get install -y xvfb xdotool imagemagick openbox wmctrl x11-utils
+            sudo apt-get install -y xvfb xdotool imagemagick openbox wmctrl x11-utils mesa-utils
           fi
       - name: Launch Minecraft and capture the real DIPX GUI
         id: gui-smoke
