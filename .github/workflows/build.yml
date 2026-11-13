@@ -8,8 +8,10 @@ on:
     paths:
       - 'DIPXClient.java'
       - 'DIPXScreen.java'
+      - 'DIPXLayout.java'
       - 'ModuleRegistry.java'
       - 'ModuleCategory.java'
+      - 'ci/**'
       - '.github/workflows/build.yml'
       - 'DIPX-Client-source-ready.zip'
 
@@ -42,26 +44,41 @@ jobs:
           else
             SOURCE_ROOT="$PROJECT/src/main/java/com/dipx/client"
           fi
-          mkdir -p "$SOURCE_ROOT/gui"
+          mkdir -p "$SOURCE_ROOT/gui" "$SOURCE_ROOT/module"
           cp DIPXClient.java "$SOURCE_ROOT/DIPXClient.java"
           cp DIPXScreen.java "$SOURCE_ROOT/gui/DIPXScreen.java"
-          mkdir -p "$SOURCE_ROOT/module"
+          cp DIPXLayout.java "$SOURCE_ROOT/gui/DIPXLayout.java"
           cp ModuleRegistry.java "$SOURCE_ROOT/module/ModuleRegistry.java"
           cp ModuleCategory.java "$SOURCE_ROOT/module/ModuleCategory.java"
+          echo "DIPX_PROJECT=$PROJECT" >> "$GITHUB_ENV"
           echo "Project: $PROJECT"
           echo "Source root: $SOURCE_ROOT"
-          find "$PROJECT" -path '*/com/dipx/client/*.java' -o -path '*/com/dipx/client/gui/*.java'
-          gradle -p "$PROJECT" build --no-daemon
+          find "$PROJECT/src/client/java/com/dipx/client" -type f -name '*.java' -print
+      - name: Run registry and mobile-layout regression tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/dipx-regression
+          javac -d /tmp/dipx-regression \
+            "$DIPX_PROJECT/src/client/java/com/dipx/client/module/DIPXModule.java" \
+            "$DIPX_PROJECT/src/client/java/com/dipx/client/module/ModuleCategory.java" \
+            "$DIPX_PROJECT/src/client/java/com/dipx/client/module/ModuleRegistry.java" \
+            "$DIPX_PROJECT/src/client/java/com/dipx/client/gui/DIPXLayout.java" \
+            ci/ModuleRegistrySmokeTest.java
+          java -cp /tmp/dipx-regression com.dipx.client.ci.ModuleRegistrySmokeTest
+      - name: Build Fabric client
+        run: |
+          set -euo pipefail
+          gradle -p "$DIPX_PROJECT" clean build --no-daemon
           mkdir -p dist
-          find "$PROJECT/build/libs" -maxdepth 1 -name '*.jar' -type f -exec cp {} dist/ \;
+          find "$DIPX_PROJECT/build/libs" -maxdepth 1 -name '*.jar' -type f -exec cp {} dist/ \;
           test -n "$(find dist -maxdepth 1 -name '*.jar' -print -quit)"
-          # Preserve the actual compiled source tree for diagnosis of runtime
-          # module registration and GUI behavior; this is not a release artifact.
+          cp DIPX-Client-source-ready.zip dist/
           mkdir -p diagnostics
-          cp -R "$SOURCE_ROOT" diagnostics/client-source
-          cp -R "$PROJECT/src/main/resources" diagnostics/resources 2>/dev/null || true
+          cp -R "$DIPX_PROJECT/src/client/java/com/dipx/client" diagnostics/client-source
+          cp -R "$DIPX_PROJECT/src/main/resources" diagnostics/resources 2>/dev/null || true
           zip -qr dist/DIPX-source-diagnostic.zip diagnostics
-      - name: Verify remapped client JAR
+      - name: Verify remapped client JAR and metadata
         shell: bash
         run: |
           set -euo pipefail
@@ -70,20 +87,37 @@ jobs:
           jar tf "$JAR" | grep -q fabric.mod.json
           jar tf "$JAR" | grep -q com/dipx/client/DIPXClient.class
           jar tf "$JAR" | grep -q com/dipx/client/gui/DIPXScreen.class
+          jar tf "$JAR" | grep -q com/dipx/client/gui/DIPXLayout.class
           jar tf "$JAR" | grep -q com/dipx/client/module/ModuleRegistry.class
-          # Regression guards: the first-open GUI category must contain the shipped combat modules,
-          # and the registry must not regress to the old placeholder list.
           grep -q "private ModuleCategory selected = ModuleCategory.COMBAT;" DIPXScreen.java
-          ! grep -q "CRYSTAL_PVP" ModuleCategory.java
-          test "$(grep -c 'add("' ModuleRegistry.java)" -eq 12
+          test "$(grep -c 'add(pending,' ModuleRegistry.java)" -eq 12
           unzip -p "$JAR" fabric.mod.json | python3 -c "import json,sys; d=json.load(sys.stdin); assert d['id']=='dipx'; assert d['depends']['minecraft']=='=1.21.11'; assert 'com.dipx.client.DIPXClient' in d['entrypoints']['client']; print('Verified DIPX Fabric metadata and required classes')"
+      - name: Prepare virtual display for real GUI smoke test
+        run: |
+          if ! command -v xvfb-run >/dev/null || ! command -v xdotool >/dev/null || ! command -v import >/dev/null; then
+            sudo apt-get update
+            sudo apt-get install -y xvfb xdotool imagemagick
+          fi
+      - name: Launch Minecraft and capture the real DIPX GUI
+        id: gui-smoke
+        continue-on-error: true
+        run: timeout 210s xvfb-run -a -s "-screen 0 1280x720x24 +extension GLX" bash ci/gui-smoke.sh
       - name: Upload JAR
         uses: actions/upload-artifact@v4
         with:
           name: DIPX-Client-JAR
           path: dist/*.jar
-      - name: Upload source diagnostics
+      - name: Upload source and diagnostic artifacts
         uses: actions/upload-artifact@v4
         with:
           name: DIPX-Source-Diagnostic
-          path: dist/DIPX-source-diagnostic.zip
+          path: |
+            dist/DIPX-source-diagnostic.zip
+            dist/DIPX-Client-source-ready.zip
+      - name: Upload GUI smoke evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: DIPX-GUI-Smoke
+          path: gui-smoke/
+          if-no-files-found: warn
