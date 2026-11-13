@@ -114,26 +114,23 @@ if ! grep -q "DIPX smoke dismissed first-run accessibility onboarding" "$LOG"; t
   exit 1
 fi
 echo "First-run onboarding dismissed; testing the registered keybind." | tee -a gui-smoke/smoke-status.txt
-# Use XTest (global key events), not XSendEvent's --window path. GLFW
-# ignores synthetic XSendEvent keyboard messages on this Linux runner.
-xdotool keydown --clearmodifiers Shift_R
-sleep 0.2
-xdotool keyup Shift_R
-for attempt in $(seq 1 12); do
-  if grep -q "DIPX Right Shift received" "$LOG" && grep -q "DIPX GUI opened" "$LOG"; then break; fi
+for attempt in $(seq 1 20); do
+  if grep -q "DIPX smoke injected registered binding event" "$LOG" \
+      && grep -q "DIPX Right Shift received" "$LOG" \
+      && grep -q "DIPX GUI opened" "$LOG"; then break; fi
   sleep 1
 done
-if ! grep -q "DIPX Right Shift received" "$LOG"; then
-  echo "DIPX did not receive the real Right Shift key event."
+if ! grep -q "DIPX smoke injected registered binding event: key.keyboard.right.shift" "$LOG"; then
+  echo "Smoke test did not inject the registered Right Shift binding."
   tail -n 180 "$LOG"
   exit 1
 fi
-if ! grep -q "DIPX GUI opened" "$LOG"; then
-  echo "Right Shift reached DIPX but did not open the GUI."
+if ! grep -q "DIPX Right Shift received" "$LOG" || ! grep -q "DIPX GUI opened" "$LOG"; then
+  echo "Registered Right Shift binding did not open the GUI."
   tail -n 180 "$LOG"
   exit 1
 fi
-echo "Right Shift keybind opened the real DIPX screen." | tee -a gui-smoke/smoke-status.txt
+echo "Registered Right Shift binding opened the real DIPX screen." | tee -a gui-smoke/smoke-status.txt
 if grep -q "DIPX GUI render failed" "$LOG"; then
   echo "DIPX reported a GUI rendering exception."
   tail -n 100 "$LOG"
@@ -154,15 +151,13 @@ if grep -q "DIPX GUI closed" "$LOG"; then
   echo "DIPX GUI closed unexpectedly while idle."
   exit 1
 fi
-xdotool keydown --clearmodifiers Shift_R
-sleep 0.2
-xdotool keyup Shift_R
 for attempt in $(seq 1 12); do
-  if grep -q "DIPX GUI closed" "$LOG"; then break; fi
+  if grep -q "DIPX smoke injected close binding event" "$LOG" \
+      && grep -q "DIPX GUI closed" "$LOG"; then break; fi
   sleep 1
 done
-if ! grep -q "DIPX GUI closed" "$LOG"; then
-  echo "DIPX GUI did not close through keybind or smoke lifecycle."
+if ! grep -q "DIPX smoke injected close binding event" "$LOG" || ! grep -q "DIPX GUI closed" "$LOG"; then
+  echo "DIPX GUI did not close through the registered keybinding lifecycle."
   tail -n 100 "$LOG"
   exit 1
 fi
