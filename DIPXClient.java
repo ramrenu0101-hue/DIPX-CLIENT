@@ -9,7 +9,6 @@ import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
 import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.screen.Screen;
-import net.minecraft.client.gui.screen.TitleScreen;
 import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.util.InputUtil;
 import net.minecraft.entity.Entity;
@@ -56,6 +55,9 @@ public final class DIPXClient implements ClientModInitializer {
     public void onInitializeClient() {
         ModuleRegistry.registerDefaults();
         LOGGER.info("DIPX initialized: {} modules registered", ModuleRegistry.all().size());
+        if (Boolean.getBoolean("dipx.smoke.gui")) {
+            LOGGER.info("DIPX smoke property present at client initialization");
+        }
 
         openGui = KeyBindingHelper.registerKeyBinding(new KeyBinding(
                 "key.dipx.open_gui",
@@ -65,6 +67,40 @@ public final class DIPXClient implements ClientModInitializer {
         ));
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
+            if (Boolean.getBoolean("dipx.smoke.gui")) {
+                if (!smokeModeLogged) {
+                    String screenName = client.currentScreen == null
+                            ? "none" : client.currentScreen.getClass().getSimpleName();
+                    LOGGER.info("DIPX smoke mode active; initial screen={}", screenName);
+                    smokeModeLogged = true;
+                }
+                if (!smokeScreenSeen) {
+                    if (client.currentScreen instanceof DIPXScreen) {
+                        smokeScreenSeen = true;
+                    } else {
+                        smokeTicks++;
+                        if (smokeTicks % 100 == 0) {
+                            String screenName = client.currentScreen == null
+                                    ? "none" : client.currentScreen.getClass().getSimpleName();
+                            LOGGER.info("DIPX smoke tick {}; screen={}", smokeTicks, screenName);
+                        }
+                        if (smokeTicks >= 400) {
+                            previousScreen = client.currentScreen;
+                            client.setScreen(new DIPXScreen());
+                            smokeScreenSeen = true;
+                            LOGGER.info("DIPX GUI opened; {} modules available (smoke fallback)",
+                                    ModuleRegistry.all().size());
+                        }
+                    }
+                }
+                if (smokeScreenSeen && client.currentScreen instanceof DIPXScreen) {
+                    smokeOpenTicks++;
+                    if (smokeOpenTicks >= 600) {
+                        closeGui();
+                        LOGGER.info("DIPX GUI closed by smoke fallback");
+                    }
+                }
+            }
             if (client.options != null) {
                 if (originalGamma == null) originalGamma = client.options.getGamma().getValue();
                 client.options.getGamma().setValue(enabled("FullBright") ? 16.0 : originalGamma);
@@ -98,36 +134,6 @@ public final class DIPXClient implements ClientModInitializer {
             // CI-only fallback: if X11 cannot synthesize a key event, open the
             // real screen after a short grace period so rendering/lifecycle can
             // still be exercised. This path is inert unless the JVM property is set.
-            if (Boolean.getBoolean("dipx.smoke.gui")) {
-                if (!smokeModeLogged) {
-                    String screenName = client.currentScreen == null
-                            ? "none" : client.currentScreen.getClass().getSimpleName();
-                    LOGGER.info("DIPX smoke mode active; initial screen={}", screenName);
-                    smokeModeLogged = true;
-                }
-                if (!smokeScreenSeen) {
-                    if (client.currentScreen instanceof DIPXScreen) {
-                        smokeScreenSeen = true;
-                    } else {
-                        smokeTicks++;
-                        if (smokeTicks >= 400) {
-                            previousScreen = client.currentScreen;
-                            client.setScreen(new DIPXScreen());
-                            smokeScreenSeen = true;
-                            LOGGER.info("DIPX GUI opened; {} modules available (smoke fallback)",
-                                    ModuleRegistry.all().size());
-                        }
-                    }
-                }
-                if (smokeScreenSeen && client.currentScreen instanceof DIPXScreen) {
-                    smokeOpenTicks++;
-                    if (smokeOpenTicks >= 600) {
-                        closeGui();
-                        LOGGER.info("DIPX GUI closed by smoke fallback");
-                    }
-                }
-            }
-
             // Toggle Sprint: client-side convenience; only engages while moving forward.
             if (client.player != null && enabled("Toggle Sprint")) {
                 boolean shouldSprint = client.player.forwardSpeed > 0.0F
