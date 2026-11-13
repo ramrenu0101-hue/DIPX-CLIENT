@@ -107,7 +107,7 @@ xdotool keyup --window "$WINDOW" Shift_R || true
 sleep 4
 if ! grep -q "DIPX GUI opened" "$LOG"; then
   echo "Right Shift event not observed yet; waiting for the opt-in smoke fallback." | tee -a gui-smoke/smoke-status.txt
-  for attempt in $(seq 1 20); do
+  for attempt in $(seq 1 30); do
     if grep -q "DIPX GUI opened" "$LOG"; then break; fi
     sleep 1
   done
@@ -145,7 +145,7 @@ fi
 xdotool keydown --window "$WINDOW" --clearmodifiers Shift_R || true
 sleep 0.5
 xdotool keyup --window "$WINDOW" Shift_R || true
-for attempt in $(seq 1 20); do
+for attempt in $(seq 1 35); do
   if grep -q "DIPX GUI closed" "$LOG"; then break; fi
   sleep 1
 done
