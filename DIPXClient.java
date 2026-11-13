@@ -9,7 +9,6 @@ import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
 import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.screen.Screen;
-import net.minecraft.client.gui.screen.TitleScreen;
 import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.util.InputUtil;
 import net.minecraft.entity.Entity;
@@ -69,14 +68,18 @@ public final class DIPXClient implements ClientModInitializer {
             // single tap. Drain the queue, then toggle at most once per tick.
             boolean guiPressed = false;
             while (openGui.wasPressed()) guiPressed = true;
+            if (guiPressed) {
+                String screenName = client.currentScreen == null
+                        ? "none" : client.currentScreen.getClass().getSimpleName();
+                LOGGER.info("DIPX Right Shift received while screen={}", screenName);
+            }
             if (guiPressed && client.currentScreen instanceof DIPXScreen) {
                 try {
                     closeGui();
                 } catch (RuntimeException screenError) {
                     LOGGER.error("Failed to close DIPX GUI", screenError);
                 }
-            } else if (guiPressed && (client.currentScreen == null
-                    || client.currentScreen instanceof TitleScreen)) {
+            } else if (guiPressed) {
                 try {
                     previousScreen = client.currentScreen;
                     client.setScreen(new DIPXScreen());
