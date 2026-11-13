@@ -91,6 +91,9 @@ if [[ -z "$WINDOW" ]] || ! grep -q "DIPX initialized" "$LOG"; then
 fi
 
 echo "Minecraft window: $(xdotool getwindowname "$WINDOW" 2>/dev/null || echo unknown)" | tee -a gui-smoke/smoke-status.txt
+xprop -id "$WINDOW" > gui-smoke/window-properties.txt 2>&1 || true
+import -window "$WINDOW" gui-smoke/Minecraft-before-DIPX.png
+echo "Captured pre-GUI Minecraft window for diagnostics." | tee -a gui-smoke/smoke-status.txt
 for attempt in $(seq 1 30); do
   if grep -q "minecraft:textures/atlas/gui.png-atlas" "$LOG"; then break; fi
   sleep 1
