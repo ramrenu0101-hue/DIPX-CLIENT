@@ -31,6 +31,7 @@ public final class DIPXClient implements ClientModInitializer {
     private static boolean smokeScreenSeen;
     private static int smokeTicks;
     private static int smokeOpenTicks;
+    private static boolean smokeModeLogged;
     private static final Logger LOGGER = LoggerFactory.getLogger("DIPX/Client");
 
     private static boolean enabled(String name) {
@@ -98,13 +99,18 @@ public final class DIPXClient implements ClientModInitializer {
             // real screen after a short grace period so rendering/lifecycle can
             // still be exercised. This path is inert unless the JVM property is set.
             if (Boolean.getBoolean("dipx.smoke.gui")) {
+                if (!smokeModeLogged) {
+                    String screenName = client.currentScreen == null
+                            ? "none" : client.currentScreen.getClass().getSimpleName();
+                    LOGGER.info("DIPX smoke mode active; initial screen={}", screenName);
+                    smokeModeLogged = true;
+                }
                 if (!smokeScreenSeen) {
                     if (client.currentScreen instanceof DIPXScreen) {
                         smokeScreenSeen = true;
                     } else {
                         smokeTicks++;
-                        if (smokeTicks >= 400 && (client.currentScreen == null
-                                || client.currentScreen instanceof TitleScreen)) {
+                        if (smokeTicks >= 400) {
                             previousScreen = client.currentScreen;
                             client.setScreen(new DIPXScreen());
                             smokeScreenSeen = true;
