@@ -8,6 +8,8 @@ on:
     paths:
       - 'DIPXClient.java'
       - 'DIPXScreen.java'
+      - 'ModuleRegistry.java'
+      - 'ModuleCategory.java'
       - '.github/workflows/build.yml'
       - 'DIPX-Client-source-ready.zip'
 
@@ -43,6 +45,9 @@ jobs:
           mkdir -p "$SOURCE_ROOT/gui"
           cp DIPXClient.java "$SOURCE_ROOT/DIPXClient.java"
           cp DIPXScreen.java "$SOURCE_ROOT/gui/DIPXScreen.java"
+          mkdir -p "$SOURCE_ROOT/module"
+          cp ModuleRegistry.java "$SOURCE_ROOT/module/ModuleRegistry.java"
+          cp ModuleCategory.java "$SOURCE_ROOT/module/ModuleCategory.java"
           echo "Project: $PROJECT"
           echo "Source root: $SOURCE_ROOT"
           find "$PROJECT" -path '*/com/dipx/client/*.java' -o -path '*/com/dipx/client/gui/*.java'
