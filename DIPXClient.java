@@ -27,11 +27,11 @@ public final class DIPXClient implements ClientModInitializer {
     private static KeyBinding openGui;
     private static Double originalGamma;
     private static Screen previousScreen;
-    private static boolean smokeScreenSeen;
-    private static int smokeTicks;
     private static int smokeOpenTicks;
     private static boolean smokeModeLogged;
     private static boolean smokeOnboardingDismissed;
+    private static boolean smokeOpenInjected;
+    private static boolean smokeCloseInjected;
     private static final Logger LOGGER = LoggerFactory.getLogger("DIPX/Client");
 
     private static boolean enabled(String name) {
@@ -69,9 +69,9 @@ public final class DIPXClient implements ClientModInitializer {
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             if (Boolean.getBoolean("dipx.smoke.gui")) {
-                // A fresh CI game directory shows the first-run accessibility
-                // onboarding screen. It captures keyboard focus, so dismiss it
-                // only in smoke mode before exercising the real Right Shift bind.
+                // The first-run onboarding screen steals game focus. Dismiss it
+                // only in CI smoke mode, then exercise the registered keybinding
+                // through Minecraft's own KeyBinding event queue.
                 if (!smokeOnboardingDismissed && client.currentScreen != null
                         && client.currentScreen.getClass().getSimpleName().equals("AccessibilityOnboardingScreen")) {
                     client.setScreen(null);
@@ -84,30 +84,19 @@ public final class DIPXClient implements ClientModInitializer {
                     LOGGER.info("DIPX smoke mode active; initial screen={}", screenName);
                     smokeModeLogged = true;
                 }
-                if (!smokeScreenSeen) {
-                    if (client.currentScreen instanceof DIPXScreen) {
-                        smokeScreenSeen = true;
-                    } else {
-                        smokeTicks++;
-                        if (smokeTicks % 100 == 0) {
-                            String screenName = client.currentScreen == null
-                                    ? "none" : client.currentScreen.getClass().getSimpleName();
-                            LOGGER.info("DIPX smoke tick {}; screen={}", smokeTicks, screenName);
-                        }
-                        if (smokeTicks >= 400) {
-                            previousScreen = client.currentScreen;
-                            client.setScreen(new DIPXScreen());
-                            smokeScreenSeen = true;
-                            LOGGER.info("DIPX GUI opened; {} modules available (smoke fallback)",
-                                    ModuleRegistry.all().size());
-                        }
-                    }
+                if (!smokeOpenInjected && client.currentScreen != null
+                        && client.currentScreen.getClass().getSimpleName().equals("TitleScreen")) {
+                    KeyBinding.onKeyPressed(openGui.getDefaultKey());
+                    smokeOpenInjected = true;
+                    LOGGER.info("DIPX smoke injected registered binding event: {}",
+                            openGui.getBoundKeyTranslationKey());
                 }
-                if (smokeScreenSeen && client.currentScreen instanceof DIPXScreen) {
+                if (smokeOpenInjected && client.currentScreen instanceof DIPXScreen) {
                     smokeOpenTicks++;
-                    if (smokeOpenTicks >= 600) {
-                        closeGui();
-                        LOGGER.info("DIPX GUI closed by smoke fallback");
+                    if (smokeOpenTicks >= 100 && !smokeCloseInjected) {
+                        KeyBinding.onKeyPressed(openGui.getDefaultKey());
+                        smokeCloseInjected = true;
+                        LOGGER.info("DIPX smoke injected close binding event");
                     }
                 }
             }
