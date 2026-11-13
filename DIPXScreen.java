@@ -31,7 +31,13 @@ public final class DIPXScreen extends Screen {
     private int left() { return (width - panelW()) / 2; }
     private int top() { return (height - panelH()) / 2; }
     private int navW() { return Math.min(NAV_W, Math.max(72, panelW() / 3)); }
-    private int perPage() { return panelH() < 205 ? 4 : 6; }
+    private int cardHeight() { return panelH() < 205 ? 31 : 35; }
+    private int perPage() {
+        // Keep every module card above the footer on short mobile viewports.
+        int usableHeight = Math.max(1, panelH() - 25 - 48);
+        int rows = Math.max(1, (usableHeight + 7) / (cardHeight() + 7));
+        return rows * 2;
+    }
     private int categorySlots() { return Math.max(1, (panelH() - 76) / 16); }
 
     private List<DIPXModule> visibleModules() {
@@ -73,7 +79,7 @@ public final class DIPXScreen extends Screen {
         int columns = 2;
         int gap = 6;
         int cardW = Math.max(55, (contentW - gap) / columns);
-        int cardH = panelH() < 205 ? 31 : 35;
+        int cardH = cardHeight();
         int rowGap = 7;
         List<DIPXModule> modules = visibleModules();
         int per = perPage();
@@ -132,7 +138,7 @@ public final class DIPXScreen extends Screen {
         int contentX = x + nav + 12;
         int contentW = panelW() - nav - 20;
         int cardW = Math.max(55, (contentW - 6) / 2);
-        int cardH = panelH() < 205 ? 31 : 35;
+        int cardH = cardHeight();
         int rowGap = 7;
         List<DIPXModule> modules = visibleModules();
         int per = perPage();
