@@ -14,6 +14,7 @@ import net.minecraft.entity.EquipmentSlot;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.util.hit.EntityHitResult;
 import net.minecraft.item.Items;
+import net.minecraft.registry.Registries;
 import net.minecraft.text.Text;
 import org.lwjgl.glfw.GLFW;
 import org.slf4j.Logger;
@@ -152,7 +153,13 @@ public final class DIPXClient implements ClientModInitializer {
             }
 
             if (enabled("Spear Inventory HUD")) {
-                int spears = client.player.getInventory().count(Items.SPEAR);
+                int spears = 0;
+                for (var stack : client.player.getInventory().main) {
+                    if (!stack.isEmpty()
+                            && Registries.ITEM.getId(stack.getItem()).getPath().contains("spear")) {
+                        spears += stack.getCount();
+                    }
+                }
                 drawContext.drawText(client.textRenderer, Text.literal("Spears: " + spears),
                         x, y, 0xFF9CE8FF, true);
                 y += 12;
