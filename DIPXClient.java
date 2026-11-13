@@ -144,6 +144,40 @@ public final class DIPXClient implements ClientModInitializer {
                         x, y, 0xFFFFC0E8, true);
             }
 
+            if (enabled("Mace Inventory HUD")) {
+                int maces = client.player.getInventory().count(Items.MACE);
+                drawContext.drawText(client.textRenderer, Text.literal("Maces: " + maces),
+                        x, y, 0xFFE7B6FF, true);
+                y += 12;
+            }
+
+            if (enabled("Weapon Swap HUD")) {
+                String held = client.player.getMainHandStack().isEmpty()
+                        ? "Empty" : client.player.getMainHandStack().getName().getString();
+                String swap = "Held: " + held + "  Slot: " + (client.player.getInventory().getSelectedSlot() + 1);
+                drawContext.drawText(client.textRenderer, Text.literal(swap),
+                        x, y, 0xFFFFD9A8, true);
+                y += 12;
+            }
+
+            if (enabled("Breach Status HUD") && client.crosshairTarget instanceof EntityHitResult armorHit
+                    && armorHit.getEntity() instanceof PlayerEntity targetPlayer) {
+                int remaining = 0, maximum = 0;
+                for (EquipmentSlot slot : new EquipmentSlot[] {
+                        EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET
+                }) {
+                    var stack = targetPlayer.getEquippedStack(slot);
+                    if (!stack.isEmpty() && stack.isDamageable()) {
+                        remaining += stack.getMaxDamage() - stack.getDamage();
+                        maximum += stack.getMaxDamage();
+                    }
+                }
+                drawContext.drawText(client.textRenderer,
+                        Text.literal("Target armor: " + (maximum == 0 ? "none" : remaining + "/" + maximum)),
+                        x, y, 0xFFFFA6A6, true);
+                y += 12;
+            }
+
             if (enabled("Mace Smash HUD")) {
                 double fall = client.player.fallDistance;
                 drawContext.drawText(client.textRenderer,
