@@ -85,6 +85,13 @@ public final class DIPXScreen extends Screen {
         int per = perPage();
         int start = modulePage * per;
 
+        if (modules.isEmpty()) {
+            ctx.method_51433(field_22793, "NO IMPLEMENTED MODULES IN THIS CATEGORY",
+                    contentX + 6, y + 62, 0xFFB8B2C4, false);
+            ctx.method_51433(field_22793, "Only tested features are shown",
+                    contentX + 6, y + 78, 0xFF817B8D, false);
+        }
+
         for (int i = start; i < Math.min(start + per, modules.size()); i++) {
             int local = i - start;
             int bx = contentX + (local % columns) * (cardW + gap);
