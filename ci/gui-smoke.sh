@@ -104,6 +104,16 @@ xdotool windowraise "$WINDOW" 2>/dev/null || true
 xdotool windowactivate --sync "$WINDOW" 2>/dev/null || true
 xdotool windowfocus --sync "$WINDOW"
 echo "Focused X11 window=$WINDOW active=$(xdotool getwindowfocus 2>/dev/null || echo unknown)" | tee -a gui-smoke/smoke-status.txt
+for attempt in $(seq 1 20); do
+  if grep -q "DIPX smoke dismissed first-run accessibility onboarding" "$LOG"; then break; fi
+  sleep 1
+done
+if ! grep -q "DIPX smoke dismissed first-run accessibility onboarding" "$LOG"; then
+  echo "Smoke runner did not dismiss the first-run accessibility screen."
+  tail -n 100 "$LOG"
+  exit 1
+fi
+echo "First-run onboarding dismissed; testing the registered keybind." | tee -a gui-smoke/smoke-status.txt
 # Use XTest (global key events), not XSendEvent's --window path. GLFW
 # ignores synthetic XSendEvent keyboard messages on this Linux runner.
 xdotool keydown --clearmodifiers Shift_R
