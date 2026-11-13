@@ -97,11 +97,13 @@ done
 sleep 2
 wmctrl -ia "$WINDOW" 2>/dev/null || true
 xdotool windowraise "$WINDOW" 2>/dev/null || true
+xdotool windowactivate --sync "$WINDOW" 2>/dev/null || true
 xdotool windowfocus --sync "$WINDOW"
-xdotool key --clearmodifiers Shift_R
+echo "Focused X11 window=$WINDOW active=$(xdotool getwindowfocus 2>/dev/null || echo unknown)" | tee -a gui-smoke/smoke-status.txt
+xdotool key --window "$WINDOW" --clearmodifiers --delay 120 Right_Shift
 sleep 4
 if ! grep -q "DIPX GUI opened" "$LOG"; then
-  xdotool key --clearmodifiers Shift_R
+  xdotool key --window "$WINDOW" --clearmodifiers --delay 120 0xffe7
   sleep 3
 fi
 if ! grep -q "DIPX GUI opened" "$LOG"; then
@@ -129,7 +131,7 @@ if grep -q "DIPX GUI closed" "$LOG"; then
   echo "DIPX GUI closed unexpectedly while idle."
   exit 1
 fi
-xdotool key --clearmodifiers Shift_R
+xdotool key --window "$WINDOW" --clearmodifiers --delay 120 Right_Shift
 sleep 2
 if ! grep -q "DIPX GUI closed" "$LOG"; then
   echo "Right Shift did not close the DIPX screen cleanly."
