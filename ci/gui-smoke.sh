@@ -8,6 +8,10 @@ export LIBGL_ALWAYS_SOFTWARE=1
 export MESA_GL_VERSION_OVERRIDE=4.5
 export ALSOFT_DRIVERS=null
 
+openbox --sm-disable >/tmp/dipx-openbox.log 2>&1 &
+OPENBOX_PID=$!
+sleep 2
+
 gradle -p "$DIPX_PROJECT" runClient --no-daemon >"$LOG" 2>&1 &
 GRADLE_PID=$!
 
@@ -16,12 +20,18 @@ cleanup() {
     pkill -TERM -P "$GRADLE_PID" 2>/dev/null || true
     kill -TERM "$GRADLE_PID" 2>/dev/null || true
   fi
+  if [[ -n "$OPENBOX_PID" ]] && kill -0 "$OPENBOX_PID" 2>/dev/null; then
+    kill -TERM "$OPENBOX_PID" 2>/dev/null || true
+  fi
 }
 trap cleanup EXIT
 
 WINDOW=""
 for attempt in $(seq 1 90); do
-  WINDOW="$(xdotool search --onlyvisible --name 'Minecraft' 2>/dev/null | head -n 1 || true)"
+  WINDOW="$(xdotool search --name 'Minecraft' 2>/dev/null | head -n 1 || true)"
+  if [[ -z "$WINDOW" ]]; then
+    WINDOW="$(wmctrl -l 2>/dev/null | awk 'NR==1 {print $1}' || true)"
+  fi
   if [[ -n "$WINDOW" ]] && grep -q "DIPX initialized" "$LOG"; then
     break
   fi
@@ -35,9 +45,12 @@ done
 
 if [[ -z "$WINDOW" ]] || ! grep -q "DIPX initialized" "$LOG"; then
   echo "Minecraft client did not reach the DIPX initialized state."
+  wmctrl -l 2>/dev/null || true
+  xwininfo -root -tree 2>/dev/null || true
   tail -n 180 "$LOG"
   exit 1
 fi
+echo "Minecraft window: $(xdotool getwindowname "$WINDOW" 2>/dev/null || echo unknown)"
 
 for attempt in $(seq 1 60); do
   if grep -q "minecraft:textures/atlas/gui.png-atlas" "$LOG"; then
@@ -46,7 +59,7 @@ for attempt in $(seq 1 60); do
   sleep 1
 done
 sleep 2
-xdotool windowactivate --sync "$WINDOW" 2>/dev/null || true
+wmctrl -ia "$WINDOW" 2>/dev/null || true
 xdotool windowraise "$WINDOW" 2>/dev/null || true
 xdotool windowfocus --sync "$WINDOW" 2>/dev/null || true
 xdotool key --window "$WINDOW" --clearmodifiers Shift_R
@@ -55,7 +68,7 @@ if ! grep -q "DIPX GUI opened" "$LOG"; then
   # Retry once after the title screen has completed its first render.
   xdotool key --window "$WINDOW" --clearmodifiers Shift_R
   sleep 3
-}
+fi
 if ! grep -q "DIPX GUI opened" "$LOG"; then
   echo "Right Shift did not open the DIPX screen."
   tail -n 180 "$LOG"
