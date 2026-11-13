@@ -64,8 +64,8 @@ public final class DIPXScreen extends Screen {
             int footerY = y + h - layout.footerHeight();
 
             // Full-screen dim and a compact, high-contrast panel.
-            ctx.fill(0, 0, width, height, 0xC8000000);
-            ctx.fill(x, y, x + w, y + h, 0xF014131D);
+            ctx.fill(0, 0, width, height, 0xFF0B0912);
+            ctx.fill(x, y, x + w, y + h, 0xFF14131D);
             ctx.fill(x, y, x + w, y + 2, 0xFFB46CFF);
             ctx.fill(x + 8, y + 43, x + w - 8, y + 44, 0xFF383241);
 
