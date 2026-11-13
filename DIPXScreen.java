@@ -55,7 +55,7 @@ public final class DIPXScreen extends Screen {
         ctx.fill(x, y, x + w, y + h, 0xF0141420);
         ctx.fill(x, y, x + w, y + 2, 0xFFB46CFF);
         ctx.drawText(textRenderer, "DIPX CLIENT", x + 10, y + 8, 0xFFE4CEFF, false);
-        ctx.drawText(textRenderer, "ALL-ROUNDER MONSTER", x + 10, y + 22, 0xFF9B91AA, false);
+        ctx.drawText(textRenderer, "PVP  /  MACE  /  SPEAR", x + 10, y + 22, 0xFF9B91AA, false);
         ctx.fill(x + 8, y + 42, x + nav, y + h - 26, 0xFF201D2B);
 
         ModuleCategory[] cats = ModuleCategory.values();
@@ -86,9 +86,9 @@ public final class DIPXScreen extends Screen {
         int start = modulePage * per;
 
         if (modules.isEmpty()) {
-            ctx.method_51433(field_22793, "NO IMPLEMENTED MODULES IN THIS CATEGORY",
+            ctx.drawText(textRenderer, "NO IMPLEMENTED MODULES IN THIS CATEGORY",
                     contentX + 6, y + 62, 0xFFB8B2C4, false);
-            ctx.method_51433(field_22793, "Only tested features are shown",
+            ctx.drawText(textRenderer, "Only tested features are shown",
                     contentX + 6, y + 78, 0xFF817B8D, false);
         }
 
