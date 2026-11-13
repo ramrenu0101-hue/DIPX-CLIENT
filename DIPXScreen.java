@@ -24,6 +24,7 @@ public final class DIPXScreen extends Screen {
     private static final int CATEGORY_ROW = 20;
     private static final int CARD_GAP = 6;
     private static boolean renderFailureLogged;
+    private static boolean smokeRenderLogged;
 
     private ModuleCategory selected = ModuleCategory.COMBAT;
     private int modulePage;
@@ -167,6 +168,10 @@ public final class DIPXScreen extends Screen {
                     + "   •   PAGE " + (modulePage + 1) + "/" + modulePages + "   •   TAP TO NEXT";
             ctx.drawText(textRenderer, textRenderer.trimToWidth(footer, Math.max(1, contentWidth)),
                     contentX, footerY + 5, 0xFF9E95AA, false);
+            if (Boolean.getBoolean("dipx.smoke.gui") && !smokeRenderLogged) {
+                smokeRenderLogged = true;
+                LOGGER.info("DIPX smoke screen rendered");
+            }
         } catch (RuntimeException renderError) {
             // Keep the screen alive after recoverable renderer errors, but retain
             // the full stack trace in latest.log instead of silently hiding it.
