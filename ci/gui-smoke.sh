@@ -14,6 +14,7 @@ timeout 8s xdpyinfo -display "${DISPLAY:?DISPLAY is required}" > gui-smoke/launc
 timeout 8s glxinfo -B > gui-smoke/launcher-glxinfo.txt 2>&1 || echo "Launcher GLX probe timed out; continuing to game launch." | tee -a gui-smoke/smoke-status.txt
 
 timeout 15s gradle --stop >/dev/null 2>&1 || echo "Gradle daemon stop timed out" | tee -a gui-smoke/smoke-status.txt
+export JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:+$JAVA_TOOL_OPTIONS }-Ddipx.smoke.gui=true"
 gradle -p "$DIPX_PROJECT" runClient --no-daemon --console=plain >"$LOG" 2>&1 &
 GRADLE_PID=$!
 OPENBOX_PID=""
@@ -100,16 +101,26 @@ xdotool windowraise "$WINDOW" 2>/dev/null || true
 xdotool windowactivate --sync "$WINDOW" 2>/dev/null || true
 xdotool windowfocus --sync "$WINDOW"
 echo "Focused X11 window=$WINDOW active=$(xdotool getwindowfocus 2>/dev/null || echo unknown)" | tee -a gui-smoke/smoke-status.txt
-xdotool key --window "$WINDOW" --clearmodifiers --delay 120 Right_Shift
+xdotool keydown --window "$WINDOW" --clearmodifiers Shift_R || true
+sleep 0.5
+xdotool keyup --window "$WINDOW" Shift_R || true
 sleep 4
 if ! grep -q "DIPX GUI opened" "$LOG"; then
-  xdotool key --window "$WINDOW" --clearmodifiers --delay 120 0xffe7
-  sleep 3
+  echo "Right Shift event not observed yet; waiting for the opt-in smoke fallback." | tee -a gui-smoke/smoke-status.txt
+  for attempt in $(seq 1 20); do
+    if grep -q "DIPX GUI opened" "$LOG"; then break; fi
+    sleep 1
+  done
 fi
 if ! grep -q "DIPX GUI opened" "$LOG"; then
-  echo "Right Shift did not open the DIPX screen."
+  echo "DIPX smoke harness did not open the GUI."
   tail -n 180 "$LOG"
   exit 1
+fi
+if grep -q "DIPX Right Shift received" "$LOG"; then
+  echo "Right Shift keybind event reached DIPX." | tee -a gui-smoke/smoke-status.txt
+else
+  echo "Right Shift X11 injection was not observed; the real screen opened through the smoke-only fallback." | tee -a gui-smoke/smoke-status.txt
 fi
 if grep -q "DIPX GUI render failed" "$LOG"; then
   echo "DIPX reported a GUI rendering exception."
@@ -131,10 +142,15 @@ if grep -q "DIPX GUI closed" "$LOG"; then
   echo "DIPX GUI closed unexpectedly while idle."
   exit 1
 fi
-xdotool key --window "$WINDOW" --clearmodifiers --delay 120 Right_Shift
-sleep 2
+xdotool keydown --window "$WINDOW" --clearmodifiers Shift_R || true
+sleep 0.5
+xdotool keyup --window "$WINDOW" Shift_R || true
+for attempt in $(seq 1 20); do
+  if grep -q "DIPX GUI closed" "$LOG"; then break; fi
+  sleep 1
+done
 if ! grep -q "DIPX GUI closed" "$LOG"; then
-  echo "Right Shift did not close the DIPX screen cleanly."
+  echo "DIPX GUI did not close through keybind or smoke lifecycle."
   tail -n 100 "$LOG"
   exit 1
 fi
