@@ -13,7 +13,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public final class DIPXScreen extends Screen {
-    private ModuleCategory selected = ModuleCategory.CRYSTAL_PVP;
+    private ModuleCategory selected = ModuleCategory.COMBAT;
     private int modulePage;
     private int categoryPage;
 
