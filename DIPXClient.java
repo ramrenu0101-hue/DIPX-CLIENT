@@ -9,6 +9,7 @@ import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
 import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.screen.Screen;
+import net.minecraft.client.gui.screen.TitleScreen;
 import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.util.InputUtil;
 import net.minecraft.entity.Entity;
@@ -27,6 +28,9 @@ public final class DIPXClient implements ClientModInitializer {
     private static KeyBinding openGui;
     private static Double originalGamma;
     private static Screen previousScreen;
+    private static boolean smokeScreenSeen;
+    private static int smokeTicks;
+    private static int smokeOpenTicks;
     private static final Logger LOGGER = LoggerFactory.getLogger("DIPX/Client");
 
     private static boolean enabled(String name) {
@@ -87,6 +91,34 @@ public final class DIPXClient implements ClientModInitializer {
                 } catch (RuntimeException screenError) {
                     previousScreen = null;
                     LOGGER.error("Failed to open DIPX GUI", screenError);
+                }
+            }
+
+            // CI-only fallback: if X11 cannot synthesize a key event, open the
+            // real screen after a short grace period so rendering/lifecycle can
+            // still be exercised. This path is inert unless the JVM property is set.
+            if (Boolean.getBoolean("dipx.smoke.gui")) {
+                if (!smokeScreenSeen) {
+                    if (client.currentScreen instanceof DIPXScreen) {
+                        smokeScreenSeen = true;
+                    } else {
+                        smokeTicks++;
+                        if (smokeTicks >= 100 && (client.currentScreen == null
+                                || client.currentScreen instanceof TitleScreen)) {
+                            previousScreen = client.currentScreen;
+                            client.setScreen(new DIPXScreen());
+                            smokeScreenSeen = true;
+                            LOGGER.info("DIPX GUI opened; {} modules available (smoke fallback)",
+                                    ModuleRegistry.all().size());
+                        }
+                    }
+                }
+                if (smokeScreenSeen && client.currentScreen instanceof DIPXScreen) {
+                    smokeOpenTicks++;
+                    if (smokeOpenTicks >= 300) {
+                        closeGui();
+                        LOGGER.info("DIPX GUI closed by smoke fallback");
+                    }
                 }
             }
 
