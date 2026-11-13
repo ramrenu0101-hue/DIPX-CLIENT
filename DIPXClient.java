@@ -103,7 +103,7 @@ public final class DIPXClient implements ClientModInitializer {
                         smokeScreenSeen = true;
                     } else {
                         smokeTicks++;
-                        if (smokeTicks >= 100 && (client.currentScreen == null
+                        if (smokeTicks >= 400 && (client.currentScreen == null
                                 || client.currentScreen instanceof TitleScreen)) {
                             previousScreen = client.currentScreen;
                             client.setScreen(new DIPXScreen());
@@ -115,7 +115,7 @@ public final class DIPXClient implements ClientModInitializer {
                 }
                 if (smokeScreenSeen && client.currentScreen instanceof DIPXScreen) {
                     smokeOpenTicks++;
-                    if (smokeOpenTicks >= 300) {
+                    if (smokeOpenTicks >= 600) {
                         closeGui();
                         LOGGER.info("DIPX GUI closed by smoke fallback");
                     }
