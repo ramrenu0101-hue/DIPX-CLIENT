@@ -154,7 +154,8 @@ public final class DIPXClient implements ClientModInitializer {
 
             if (enabled("Spear Inventory HUD")) {
                 int spears = 0;
-                for (var stack : client.player.getInventory().main) {
+                for (int slotIndex = 0; slotIndex < client.player.getInventory().size(); slotIndex++) {
+                    var stack = client.player.getInventory().getStack(slotIndex);
                     if (!stack.isEmpty()
                             && Registries.ITEM.getId(stack.getItem()).getPath().contains("spear")) {
                         spears += stack.getCount();
