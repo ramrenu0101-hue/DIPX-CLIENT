@@ -131,6 +131,16 @@ if ! grep -q "DIPX Right Shift received" "$LOG" || ! grep -q "DIPX GUI opened" "
   exit 1
 fi
 echo "Registered Right Shift binding opened the real DIPX screen." | tee -a gui-smoke/smoke-status.txt
+for attempt in $(seq 1 15); do
+  if grep -q "DIPX smoke screen rendered" "$LOG"; then break; fi
+  sleep 1
+done
+if ! grep -q "DIPX smoke screen rendered" "$LOG"; then
+  echo "DIPX screen opened but did not complete a render frame."
+  tail -n 120 "$LOG"
+  exit 1
+fi
+sleep 1
 if grep -q "DIPX GUI render failed" "$LOG"; then
   echo "DIPX reported a GUI rendering exception."
   tail -n 100 "$LOG"
