@@ -25,18 +25,18 @@ public final class ModuleRegistry {
         if (registered) return;
 
         List<DIPXModule> pending = new ArrayList<>();
-        add(pending, "FullBright", "Gamma visibility toggle", ModuleCategory.RENDER);
-        add(pending, "Toggle Sprint", "Sprint while moving forward", ModuleCategory.MOVEMENT);
+        add(pending, "FullBright", "Gamma visibility", ModuleCategory.RENDER);
+        add(pending, "Toggle Sprint", "Sprint while moving", ModuleCategory.MOVEMENT);
         add(pending, "Coordinates HUD", "Live XYZ coordinates", ModuleCategory.PLAYER);
-        add(pending, "Totem Counter", "Count carried totems", ModuleCategory.PLAYER);
-        add(pending, "Wind Charge Counter", "Count carried wind charges", ModuleCategory.PLAYER);
-        add(pending, "Armor HUD", "Equipped armor durability", ModuleCategory.PLAYER);
-        add(pending, "Target Info HUD", "Crosshair target and range", ModuleCategory.COMBAT);
-        add(pending, "Mace Smash HUD", "Live fall distance for mace timing", ModuleCategory.MACE_PVP);
-        add(pending, "Mace Inventory HUD", "Carried mace count", ModuleCategory.MACE_PVP);
-        add(pending, "Spear Inventory HUD", "Carried spear count", ModuleCategory.SPEAR_PVP);
-        add(pending, "Breach Status HUD", "Target armor durability", ModuleCategory.COMBAT);
-        add(pending, "Weapon Swap HUD", "Held weapon and hotbar slot", ModuleCategory.COMBAT);
+        add(pending, "Totem Counter", "Carried totem count", ModuleCategory.PLAYER);
+        add(pending, "Wind Charge Counter", "Wind charge count", ModuleCategory.PLAYER);
+        add(pending, "Armor HUD", "Equipped armor status", ModuleCategory.PLAYER);
+        add(pending, "Target Info HUD", "Target name and range", ModuleCategory.COMBAT);
+        add(pending, "Mace Smash HUD", "Mace fall timing", ModuleCategory.MACE_PVP);
+        add(pending, "Mace Inventory HUD", "Mace count", ModuleCategory.MACE_PVP);
+        add(pending, "Spear Inventory HUD", "Spear count", ModuleCategory.SPEAR_PVP);
+        add(pending, "Breach Status HUD", "Target armor status", ModuleCategory.COMBAT);
+        add(pending, "Weapon Swap HUD", "Held item and slot", ModuleCategory.COMBAT);
 
         Set<String> names = new HashSet<>();
         for (DIPXModule module : pending) {

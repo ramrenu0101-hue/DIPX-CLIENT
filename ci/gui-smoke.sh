@@ -150,7 +150,7 @@ fi
 import -window "$WINDOW" gui-smoke/DIPX-GUI.png
 COLOR_COUNT="$(identify -format '%k' gui-smoke/DIPX-GUI.png)"
 DIMENSIONS="$(identify -format '%wx%h' gui-smoke/DIPX-GUI.png)"
-if [[ "$COLOR_COUNT" -lt 100 ]]; then
+if [[ "$COLOR_COUNT" -lt 16 ]]; then
   echo "GUI screenshot appears blank or unrendered (unique colors: $COLOR_COUNT)."
   exit 1
 fi

@@ -130,9 +130,6 @@ public final class DIPXClient implements ClientModInitializer {
                 }
             }
 
-            // CI-only fallback: if X11 cannot synthesize a key event, open the
-            // real screen after a short grace period so rendering/lifecycle can
-            // still be exercised. This path is inert unless the JVM property is set.
             // Toggle Sprint: client-side convenience; only engages while moving forward.
             if (client.player != null && enabled("Toggle Sprint")) {
                 boolean shouldSprint = client.player.forwardSpeed > 0.0F
