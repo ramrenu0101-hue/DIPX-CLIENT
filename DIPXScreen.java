@@ -1,6 +1,6 @@
-
 package com.dipx.client.gui;
 
+import com.dipx.client.DIPXClient;
 import com.dipx.client.module.DIPXModule;
 import com.dipx.client.module.ModuleCategory;
 import com.dipx.client.module.ModuleRegistry;
@@ -10,141 +10,246 @@ import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.text.Text;
 
 import java.util.List;
+import java.util.Locale;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
+/**
+ * Original DIPX dark-purple PvP interface. The layout is deliberately drawn
+ * with simple primitives (no shader, texture, or external GUI dependency) for
+ * compatibility with mobile OpenGL drivers and touch input.
+ */
 public final class DIPXScreen extends Screen {
-    private ModuleCategory selected = ModuleCategory.CRYSTAL_PVP;
-    private int page;
+    private static final Logger LOGGER = LoggerFactory.getLogger("DIPX/GUI");
+    private static final int CATEGORY_ROW = 20;
+    private static final int CARD_GAP = 6;
+    private static boolean renderFailureLogged;
+    private static boolean smokeRenderLogged;
 
-    private static final int PANEL_W = 430;
-    private static final int PANEL_H = 270;
+    private ModuleCategory selected = ModuleCategory.COMBAT;
+    private int modulePage;
+    private int categoryPage;
 
     public DIPXScreen() {
         super(Text.literal("DIPX CLIENT"));
     }
 
+    private List<DIPXModule> visibleModules() {
+        return ModuleRegistry.all().stream()
+                .filter(module -> module.category() == selected)
+                .toList();
+    }
+
+    private static int pageCount(int count, int perPage) {
+        return Math.max(1, (count + Math.max(1, perPage) - 1) / Math.max(1, perPage));
+    }
+
     @Override
     public void render(DrawContext ctx, int mouseX, int mouseY, float delta) {
-        renderBackground(ctx, mouseX, mouseY, delta);
+        try {
+            DIPXLayout layout = DIPXLayout.calculate(width, height);
+            int x = layout.panelX();
+            int y = layout.panelY();
+            int w = layout.panelWidth();
+            int h = layout.panelHeight();
+            if (w <= 0 || h <= 0) return;
 
-        int x = (width - PANEL_W) / 2;
-        int y = (height - PANEL_H) / 2;
+            List<DIPXModule> all = ModuleRegistry.all();
+            List<DIPXModule> modules = visibleModules();
+            ModuleCategory[] categories = ModuleCategory.values();
+            int categoryPages = pageCount(categories.length, layout.categorySlots());
+            categoryPage = Math.max(0, Math.min(categoryPage, categoryPages - 1));
+            int modulePages = pageCount(modules.size(), layout.perPage());
+            modulePage = Math.max(0, Math.min(modulePage, modulePages - 1));
 
-        ctx.fill(x, y, x + PANEL_W, y + PANEL_H, 0xF0141420);
-        ctx.fill(x, y, x + PANEL_W, y + 2, 0xFFB46CFF);
+            int footerY = y + h - layout.footerHeight();
 
-        ctx.drawText(textRenderer, "DIPX CLIENT",
-                x + 14, y + 12, 0xFFE4CEFF, false);
+            // Full-screen dim and a compact, high-contrast panel.
+            ctx.fill(0, 0, width, height, 0xFF0B0912);
+            ctx.fill(x, y, x + w, y + h, 0xFF14131D);
+            ctx.fill(x, y, x + w, y + 2, 0xFFB46CFF);
+            ctx.fill(x + 8, y + 43, x + w - 8, y + 44, 0xFF383241);
 
-        ctx.drawText(textRenderer,
-                "ALL-ROUNDER MONSTER  •  RIGHT SHIFT",
-                x + 14, y + 27, 0xFF9B91AA, false);
+            // DIPX identity and live registry status.
+            ctx.drawText(textRenderer, "DIPX", x + 12, y + 9, 0xFFE9D8FF, false);
+            ctx.drawText(textRenderer, "ALL-ROUNDER  /  PVP CLIENT",
+                    x + 12, y + 24, 0xFFAAA0B9, false);
+            String registryStatus = all.size() + " MODULES  /  " + ModuleRegistry.enabledCount() + " ON";
+            int statusWidth = textRenderer.getWidth(registryStatus);
+            ctx.drawText(textRenderer, registryStatus,
+                    x + w - statusWidth - 12, y + 15, 0xFFB98BFF, false);
 
-        ctx.fill(x + 10, y + 45,
-                x + 112, y + PANEL_H - 12, 0xFF201D2B);
+            // Sidebar.
+            int sidebarRight = x + layout.sidebarWidth();
+            ctx.fill(x + 8, y + 49, sidebarRight, footerY - 4, 0xFF1D1A27);
+            ctx.drawText(textRenderer, "CATEGORIES", x + 13, y + 53, 0xFF8E849F, false);
 
-        ModuleCategory[] cats = ModuleCategory.values();
-
-        for (int i = 0; i < cats.length; i++) {
-            int cy = y + 52 + i * 18;
-            boolean active = cats[i] == selected;
-
-            if (active) {
-                ctx.fill(x + 14, cy - 3, x + 108, cy + 12,
-                        0xFF59377B);
+            int firstCategory = categoryPage * layout.categorySlots();
+            int lastCategory = Math.min(firstCategory + layout.categorySlots(), categories.length);
+            int categoryTop = y + layout.categoryTop();
+            for (int i = firstCategory; i < lastCategory; i++) {
+                int row = i - firstCategory;
+                int cy = categoryTop + row * CATEGORY_ROW;
+                boolean active = categories[i] == selected;
+                if (active) {
+                    ctx.fill(x + 10, cy - 3, sidebarRight - 4, cy + 15, 0xFF563477);
+                    ctx.fill(x + 10, cy - 3, x + 12, cy + 15, 0xFFCB8DFF);
+                }
+                String label = textRenderer.trimToWidth(
+                        categories[i].title, Math.max(1, layout.sidebarWidth() - 25));
+                ctx.drawText(textRenderer, label, x + 16, cy + 1,
+                        active ? 0xFFFFFFFF : 0xFFB9B2C6, false);
             }
 
-            ctx.drawText(textRenderer, cats[i].title,
-                    x + 19, cy,
-                    active ? 0xFFFFFFFF : 0xFFB8B2C4, false);
+            if (categoryPages > 1) {
+                String categoryPageLabel = "CAT " + (categoryPage + 1) + "/" + categoryPages;
+                ctx.drawText(textRenderer, categoryPageLabel, x + 13, footerY + 5,
+                        0xFFB98BFF, false);
+            }
+
+            // Main content header.
+            int contentX = x + layout.contentX();
+            int contentWidth = layout.contentWidth();
+            String categoryTitle = selected.title.toUpperCase(Locale.ROOT);
+            ctx.drawText(textRenderer, categoryTitle, contentX, y + 50, 0xFFE9D8FF, false);
+            String categorySummary = modules.size() + " AVAILABLE";
+            int summaryWidth = textRenderer.getWidth(categorySummary);
+            if (contentWidth > summaryWidth + 8) {
+                ctx.drawText(textRenderer, categorySummary,
+                        contentX + contentWidth - summaryWidth, y + 50, 0xFF91889F, false);
+            }
+
+            // Touch-friendly module cards. Every visible card maps to the same
+            // hitbox calculation in mouseClicked(), avoiding render/input drift.
+            int cardTop = y + layout.contentTop();
+            int start = modulePage * layout.perPage();
+            int end = Math.min(start + layout.perPage(), modules.size());
+            if (modules.isEmpty()) {
+                ctx.drawText(textRenderer, "NO MODULES IN THIS CATEGORY",
+                        contentX + 6, cardTop + 8, 0xFFB9B2C6, false);
+            }
+
+            for (int i = start; i < end; i++) {
+                int local = i - start;
+                int column = local % layout.columns();
+                int row = local / layout.columns();
+                int bx = contentX + column * (layout.cardWidth() + CARD_GAP);
+                int by = cardTop + row * (layout.cardHeight() + layout.rowGap());
+                DIPXModule module = modules.get(i);
+                boolean enabled = module.enabled();
+
+                ctx.fill(bx, by, bx + layout.cardWidth(), by + layout.cardHeight(),
+                        enabled ? 0xFF382648 : 0xFF25232E);
+                ctx.fill(bx, by, bx + 2, by + layout.cardHeight(),
+                        enabled ? 0xFFCB8DFF : 0xFF625A6D);
+
+                String moduleName = textRenderer.trimToWidth(
+                        module.name(), Math.max(1, layout.cardWidth() - 14));
+                String description = textRenderer.trimToWidth(
+                        module.description(), Math.max(1, layout.cardWidth() - 14));
+                ctx.drawText(textRenderer, moduleName, bx + 7, by + 5, 0xFFF3EDFA, false);
+                if (layout.cardHeight() >= 30) {
+                    ctx.drawText(textRenderer, description, bx + 7, by + 18, 0xFFAAA1B7, false);
+                }
+
+                int pillWidth = Math.min(34, Math.max(22, layout.cardWidth() / 3));
+                int pillX = bx + layout.cardWidth() - pillWidth - 6;
+                int pillY = by + layout.cardHeight() - 15;
+                if (pillY >= by + 2 && pillY + 11 <= by + layout.cardHeight()) {
+                    ctx.fill(pillX, pillY, pillX + pillWidth, pillY + 11,
+                            enabled ? 0xFF70439A : 0xFF37333F);
+                    ctx.drawText(textRenderer, enabled ? "ON" : "OFF",
+                            pillX + 5, pillY + 2,
+                            enabled ? 0xFFFFFFFF : 0xFFB2AABD, false);
+                }
+            }
+
+            String footer = "ACTIVE " + ModuleRegistry.enabledCount() + "/" + all.size()
+                    + "   •   PAGE " + (modulePage + 1) + "/" + modulePages + "   •   TAP TO NEXT";
+            ctx.drawText(textRenderer, textRenderer.trimToWidth(footer, Math.max(1, contentWidth)),
+                    contentX, footerY + 5, 0xFF9E95AA, false);
+            if (Boolean.getBoolean("dipx.smoke.gui") && !smokeRenderLogged) {
+                smokeRenderLogged = true;
+                LOGGER.info("DIPX smoke screen rendered");
+            }
+        } catch (RuntimeException renderError) {
+            // Keep the screen alive after recoverable renderer errors, but retain
+            // the full stack trace in latest.log instead of silently hiding it.
+            if (!renderFailureLogged) {
+                renderFailureLogged = true;
+                LOGGER.error("DIPX GUI render failed; screen retained for diagnosis", renderError);
+            }
         }
-
-        List<DIPXModule> visible = ModuleRegistry.all()
-                .stream()
-                .filter(m -> m.category() == selected)
-                .toList();
-
-        int perPage = 9;
-        int start = page * perPage;
-
-        for (int i = start; i < Math.min(start + perPage, visible.size()); i++) {
-            DIPXModule m = visible.get(i);
-
-            int local = i - start;
-            int col = local % 2;
-            int row = local / 2;
-
-            int bx = x + 124 + col * 145;
-            int by = y + 54 + row * 43;
-
-            ctx.fill(bx, by, bx + 135, by + 34,
-                    m.enabled() ? 0xFF493064 : 0xFF292633);
-
-            ctx.drawText(textRenderer, m.name(),
-                    bx + 7, by + 7, 0xFFF2ECFA, false);
-
-            ctx.drawText(textRenderer,
-                    m.enabled() ? "ON" : "OFF",
-                    bx + 7, by + 20,
-                    m.enabled() ? 0xFFB98BFF : 0xFF96909F, false);
-        }
-
-        ctx.drawText(textRenderer,
-                "Click a module to toggle  •  ESC to close",
-                x + 124, y + PANEL_H - 22, 0xFF9992A6, false);
-
-        super.render(ctx, mouseX, mouseY, delta);
     }
 
     @Override
     public boolean mouseClicked(Click click, boolean doubled) {
-        if (click.button() != 0) {
-            return super.mouseClicked(click, doubled);
-        }
+        if (click.button() != 0) return super.mouseClicked(click, doubled);
 
+        DIPXLayout layout = DIPXLayout.calculate(width, height);
+        int x = layout.panelX();
+        int y = layout.panelY();
+        int h = layout.panelHeight();
+        int sidebarRight = x + layout.sidebarWidth();
+        int footerY = y + h - layout.footerHeight();
         double mouseX = click.x();
         double mouseY = click.y();
 
-        int x = (width - PANEL_W) / 2;
-        int y = (height - PANEL_H) / 2;
+        ModuleCategory[] categories = ModuleCategory.values();
+        int firstCategory = categoryPage * layout.categorySlots();
+        int lastCategory = Math.min(firstCategory + layout.categorySlots(), categories.length);
+        int categoryTop = y + layout.categoryTop();
 
-        if (mouseX >= x + 14 && mouseX <= x + 108
-                && mouseY >= y + 49
-                && mouseY <= y + 49 + ModuleCategory.values().length * 18) {
-
-            int index = (int) ((mouseY - (y + 49)) / 18);
-
-            if (index >= 0 && index < ModuleCategory.values().length) {
-                selected = ModuleCategory.values()[index];
-                page = 0;
+        if (mouseX >= x + 10 && mouseX <= sidebarRight - 4
+                && mouseY >= categoryTop - 3
+                && mouseY < categoryTop + (lastCategory - firstCategory) * CATEGORY_ROW) {
+            int row = (int) ((mouseY - categoryTop) / CATEGORY_ROW);
+            int index = firstCategory + row;
+            if (index >= firstCategory && index < lastCategory) {
+                selected = categories[index];
+                modulePage = 0;
                 return true;
             }
         }
 
-        List<DIPXModule> visible = ModuleRegistry.all()
-                .stream()
-                .filter(m -> m.category() == selected)
-                .toList();
+        int categoryPages = pageCount(categories.length, layout.categorySlots());
+        if (categoryPages > 1 && mouseX >= x + 8 && mouseX <= sidebarRight
+                && mouseY >= footerY && mouseY <= y + h) {
+            categoryPage = (categoryPage + 1) % categoryPages;
+            return true;
+        }
 
-        int perPage = 9;
+        List<DIPXModule> modules = visibleModules();
+        int pages = pageCount(modules.size(), layout.perPage());
+        int contentX = x + layout.contentX();
+        int cardTop = y + layout.contentTop();
+        int start = modulePage * layout.perPage();
+        int end = Math.min(start + layout.perPage(), modules.size());
 
-        for (int i = page * perPage;
-             i < Math.min((page + 1) * perPage, visible.size()); i++) {
-
-            int local = i - page * perPage;
-            int col = local % 2;
-            int row = local / 2;
-
-            int bx = x + 124 + col * 145;
-            int by = y + 54 + row * 43;
-
-            if (mouseX >= bx && mouseX <= bx + 135
-                    && mouseY >= by && mouseY <= by + 34) {
-                visible.get(i).toggle();
+        for (int i = start; i < end; i++) {
+            int local = i - start;
+            int column = local % layout.columns();
+            int row = local / layout.columns();
+            int bx = contentX + column * (layout.cardWidth() + CARD_GAP);
+            int by = cardTop + row * (layout.cardHeight() + layout.rowGap());
+            if (mouseX >= bx && mouseX <= bx + layout.cardWidth()
+                    && mouseY >= by && mouseY <= by + layout.cardHeight()) {
+                modules.get(i).toggle();
                 return true;
             }
         }
 
+        if (mouseX >= contentX && mouseX <= contentX + layout.contentWidth()
+                && mouseY >= footerY && mouseY <= y + h) {
+            modulePage = (modulePage + 1) % pages;
+            return true;
+        }
         return super.mouseClicked(click, doubled);
+    }
+
+    @Override
+    public void close() {
+        DIPXClient.closeGui();
     }
 
     @Override
