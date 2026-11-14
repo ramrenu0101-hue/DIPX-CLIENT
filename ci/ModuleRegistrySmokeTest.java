@@ -18,7 +18,7 @@ public final class ModuleRegistrySmokeTest {
     public static void main(String[] args) {
         ModuleRegistry.registerDefaults();
         List<DIPXModule> modules = ModuleRegistry.all();
-        check(modules.size() == 12, "Expected 12 implemented modules, got " + modules.size());
+        check(modules.size() == 14, "Expected 14 implemented modules, got " + modules.size());
         check(ModuleRegistry.enabledCount() == 0, "Modules must start disabled");
 
         Set<String> names = new HashSet<>();
@@ -34,6 +34,8 @@ public final class ModuleRegistrySmokeTest {
         check(names.contains("Spear Inventory HUD"), "Spear inventory HUD is missing");
         check(names.contains("Breach Status HUD"), "Breach status HUD is missing");
         check(names.contains("Weapon Swap HUD"), "Weapon swap HUD is missing");
+        check(names.contains("Attack Cooldown HUD"), "Manual attack timing HUD is missing");
+        check(names.contains("Spear Assist HUD"), "Manual spear helper HUD is missing");
 
         DIPXModule first = modules.get(0);
         first.toggle();
@@ -43,7 +45,7 @@ public final class ModuleRegistrySmokeTest {
         check(ModuleRegistry.enabledCount() == 0, "Enabled count did not reset");
 
         ModuleRegistry.registerDefaults();
-        check(ModuleRegistry.all().size() == 12, "Repeated registration duplicated modules");
+        check(ModuleRegistry.all().size() == 14, "Repeated registration duplicated modules");
         boolean immutable = false;
         try {
             modules.clear();
@@ -81,7 +83,7 @@ public final class ModuleRegistrySmokeTest {
             }
         }
 
-        System.out.println("DIPX regression checks passed: 12 modules, idempotent registry, "
+        System.out.println("DIPX regression checks passed: 14 modules, idempotent registry, "
                 + "enabled counter, immutable snapshot, and responsive layouts.");
     }
 }

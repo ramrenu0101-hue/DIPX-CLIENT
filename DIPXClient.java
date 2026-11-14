@@ -205,6 +205,18 @@ public final class DIPXClient implements ClientModInitializer {
                         x, y, 0xFFFFC0E8, true);
             }
 
+            // Manual timing only: shows the vanilla attack cooldown without
+            // sending clicks, changing targets, or automating attacks.
+            if (enabled("Attack Cooldown HUD")) {
+                float cooldown = client.player.getAttackCooldownProgress(0.0F);
+                int percent = Math.round(cooldown * 100.0F);
+                String timing = "Attack timing: " + percent + "%  "
+                        + (percent >= 100 ? "READY" : "RECHARGING");
+                drawContext.drawText(client.textRenderer, Text.literal(timing),
+                        x, y, percent >= 100 ? 0xFF9AF5BD : 0xFFFFD18A, true);
+                y += 12;
+            }
+
             if (enabled("Mace Inventory HUD")) {
                 int maces = client.player.getInventory().count(Items.MACE);
                 drawContext.drawText(client.textRenderer, Text.literal("Maces: " + maces),
@@ -222,6 +234,30 @@ public final class DIPXClient implements ClientModInitializer {
                     }
                 }
                 drawContext.drawText(client.textRenderer, Text.literal("Spears: " + spears),
+                        x, y, 0xFF9CE8FF, true);
+                y += 12;
+            }
+
+            // Manual spear helper: only reports the player's own hotbar slot
+            // and the entity already under the crosshair. It never swaps items.
+            if (enabled("Spear Assist HUD")) {
+                int spearSlot = -1;
+                for (int slotIndex = 0; slotIndex < 9; slotIndex++) {
+                    var stack = client.player.getInventory().getStack(slotIndex);
+                    if (!stack.isEmpty()
+                            && Registries.ITEM.getId(stack.getItem()).getPath().contains("spear")) {
+                        spearSlot = slotIndex + 1;
+                        break;
+                    }
+                }
+                String targetRange = "no target";
+                if (client.crosshairTarget instanceof EntityHitResult spearHit) {
+                    targetRange = String.format(java.util.Locale.ROOT, "%.1fm",
+                            client.player.distanceTo(spearHit.getEntity()));
+                }
+                String spearAssist = (spearSlot < 0 ? "Spear: not in hotbar"
+                        : "Spear slot: " + spearSlot) + "  |  Crosshair: " + targetRange;
+                drawContext.drawText(client.textRenderer, Text.literal(spearAssist),
                         x, y, 0xFF9CE8FF, true);
                 y += 12;
             }
