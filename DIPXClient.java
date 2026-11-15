@@ -3,7 +3,9 @@ package com.dipx.client;
 import com.dipx.client.gui.DIPXScreen;
 import com.dipx.client.module.DIPXModule;
 import com.dipx.client.module.ModuleRegistry;
+import com.dipx.client.module.ModuleConfigStore;
 import net.fabricmc.api.ClientModInitializer;
+import net.fabricmc.loader.api.FabricLoader;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
 import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
@@ -19,6 +21,7 @@ import net.minecraft.item.Items;
 import net.minecraft.registry.Registries;
 import net.minecraft.text.Text;
 import org.lwjgl.glfw.GLFW;
+import java.io.IOException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -41,6 +44,15 @@ public final class DIPXClient implements ClientModInitializer {
         return false;
     }
 
+    /** Saves module states immediately after a user changes a GUI toggle. */
+    public static void saveModuleConfig() {
+        try {
+            ModuleConfigStore.save(FabricLoader.getInstance().getConfigDir(), ModuleRegistry.all());
+        } catch (IOException | SecurityException configError) {
+            LOGGER.warn("Could not save DIPX module settings", configError);
+        }
+    }
+
     /** Restores the screen that was visible before DIPX was opened. */
     public static void closeGui() {
         MinecraftClient client = MinecraftClient.getInstance();
@@ -55,7 +67,13 @@ public final class DIPXClient implements ClientModInitializer {
     @Override
     public void onInitializeClient() {
         ModuleRegistry.registerDefaults();
-        LOGGER.info("DIPX initialized: {} modules registered", ModuleRegistry.all().size());
+        try {
+            ModuleConfigStore.load(FabricLoader.getInstance().getConfigDir(), ModuleRegistry.all());
+        } catch (IOException | SecurityException configError) {
+            LOGGER.warn("Could not load DIPX module settings; using defaults", configError);
+        }
+        LOGGER.info("DIPX initialized: {} modules registered ({} enabled)",
+                ModuleRegistry.all().size(), ModuleRegistry.enabledCount());
         if (Boolean.getBoolean("dipx.smoke.gui")) {
             LOGGER.info("DIPX smoke property present at client initialization");
         }

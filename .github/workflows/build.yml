@@ -11,6 +11,7 @@ on:
       - 'DIPXLayout.java'
       - 'ModuleRegistry.java'
       - 'ModuleCategory.java'
+      - 'ModuleConfigStore.java'
       - 'ci/**'
       - '.github/workflows/build.yml'
       - 'DIPX-Client-source-ready.zip'
@@ -50,6 +51,7 @@ jobs:
           cp DIPXLayout.java "$SOURCE_ROOT/gui/DIPXLayout.java"
           cp ModuleRegistry.java "$SOURCE_ROOT/module/ModuleRegistry.java"
           cp ModuleCategory.java "$SOURCE_ROOT/module/ModuleCategory.java"
+          cp ModuleConfigStore.java "$SOURCE_ROOT/module/ModuleConfigStore.java"
           echo "DIPX_PROJECT=$PROJECT" >> "$GITHUB_ENV"
           echo "Project: $PROJECT"
           echo "Source root: $SOURCE_ROOT"
@@ -63,6 +65,7 @@ jobs:
             "$DIPX_PROJECT/src/client/java/com/dipx/client/module/DIPXModule.java" \
             "$DIPX_PROJECT/src/client/java/com/dipx/client/module/ModuleCategory.java" \
             "$DIPX_PROJECT/src/client/java/com/dipx/client/module/ModuleRegistry.java" \
+            "$DIPX_PROJECT/src/client/java/com/dipx/client/module/ModuleConfigStore.java" \
             "$DIPX_PROJECT/src/client/java/com/dipx/client/gui/DIPXLayout.java" \
             ci/ModuleRegistrySmokeTest.java
           java -cp /tmp/dipx-regression com.dipx.client.ci.ModuleRegistrySmokeTest
@@ -89,6 +92,9 @@ jobs:
           jar tf "$JAR" | grep -q com/dipx/client/gui/DIPXScreen.class
           jar tf "$JAR" | grep -q com/dipx/client/gui/DIPXLayout.class
           jar tf "$JAR" | grep -q com/dipx/client/module/ModuleRegistry.class
+          jar tf "$JAR" | grep -q com/dipx/client/module/ModuleConfigStore.class
+          grep -q "ModuleConfigStore.load" DIPXClient.java
+          grep -q "DIPXClient.saveModuleConfig()" DIPXScreen.java
           grep -q "private ModuleCategory selected = ModuleCategory.COMBAT;" DIPXScreen.java
           grep -q "else if (guiPressed)" DIPXClient.java
           grep -q "DIPXClient.closeGui()" DIPXScreen.java

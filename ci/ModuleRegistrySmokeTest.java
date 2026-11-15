@@ -46,6 +46,63 @@ public final class ModuleRegistrySmokeTest {
 
         ModuleRegistry.registerDefaults();
         check(ModuleRegistry.all().size() == 14, "Repeated registration duplicated modules");
+
+        // Settings round-trip through a temporary config directory, never the user's config.
+        java.nio.file.Path configDirectory = null;
+        try {
+            configDirectory = java.nio.file.Files.createTempDirectory("dipx-config-test");
+            DIPXModule fullBright = modules.stream()
+                    .filter(module -> module.name().equals("FullBright")).findFirst().orElseThrow();
+            DIPXModule spearAssist = modules.stream()
+                    .filter(module -> module.name().equals("Spear Assist HUD")).findFirst().orElseThrow();
+            fullBright.setEnabled(true);
+            spearAssist.setEnabled(true);
+            ModuleConfigStore.save(configDirectory, modules);
+            java.nio.file.Path configFile = configDirectory.resolve(ModuleConfigStore.FILE_NAME);
+            check(java.nio.file.Files.isRegularFile(configFile), "Config file was not written");
+
+            for (DIPXModule module : modules) module.setEnabled(false);
+            ModuleConfigStore.load(configDirectory, modules);
+            check(fullBright.enabled() && spearAssist.enabled(),
+                    "Enabled module states were not restored");
+            check(ModuleRegistry.enabledCount() == 2, "Restored enabled count is incorrect");
+
+            java.util.Properties malformed = new java.util.Properties();
+            malformed.setProperty("module.FullBright", "not-a-boolean");
+            malformed.setProperty("module.Toggle Sprint", "true");
+            malformed.setProperty("module.Removed Module", "true");
+            try (java.io.OutputStream output = java.nio.file.Files.newOutputStream(configFile)) {
+                malformed.store(output, "regression input");
+            }
+            ModuleConfigStore.load(configDirectory, modules);
+            check(fullBright.enabled(), "Malformed value should not overwrite a valid in-memory state");
+            check(modules.stream().filter(module -> module.name().equals("Toggle Sprint"))
+                    .findFirst().orElseThrow().enabled(), "Known setting was not loaded");
+            check(ModuleRegistry.enabledCount() == 3,
+                    "Unknown settings or malformed values changed the wrong modules");
+
+            java.nio.file.Files.writeString(configFile, "module.FullBright=\\uZZZZ\\n");
+            boolean corruptFileRejected = false;
+            try {
+                ModuleConfigStore.load(configDirectory, modules);
+            } catch (java.io.IOException expected) {
+                corruptFileRejected = true;
+            }
+            check(corruptFileRejected, "Corrupt properties file was not reported safely");
+        } catch (java.io.IOException configFailure) {
+            throw new AssertionError("Module config persistence failed", configFailure);
+        } finally {
+            if (configDirectory != null) {
+                try (var paths = java.nio.file.Files.walk(configDirectory)) {
+                    for (java.nio.file.Path path : paths.sorted(java.util.Comparator.reverseOrder()).toList()) {
+                        java.nio.file.Files.deleteIfExists(path);
+                    }
+                } catch (java.io.IOException cleanupFailure) {
+                    throw new AssertionError("Could not clean isolated config test directory", cleanupFailure);
+                }
+            }
+        }
+
         boolean immutable = false;
         try {
             modules.clear();

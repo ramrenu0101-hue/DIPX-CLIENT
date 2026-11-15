@@ -235,6 +235,7 @@ public final class DIPXScreen extends Screen {
             if (mouseX >= bx && mouseX <= bx + layout.cardWidth()
                     && mouseY >= by && mouseY <= by + layout.cardHeight()) {
                 modules.get(i).toggle();
+                DIPXClient.saveModuleConfig();
                 return true;
             }
         }
