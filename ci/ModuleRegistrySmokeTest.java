@@ -4,6 +4,7 @@ import com.dipx.client.gui.DIPXLayout;
 import com.dipx.client.module.DIPXModule;
 import com.dipx.client.module.ModuleCategory;
 import com.dipx.client.module.ModuleRegistry;
+import com.dipx.client.module.ModuleConfigStore;
 
 import java.util.HashSet;
 import java.util.List;
