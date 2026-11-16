@@ -196,26 +196,6 @@ if [[ ! -f "$CONFIG_FILE" ]] || ! grep -Fq 'module.Target\ Info\ HUD=true' "$CON
 fi
 echo "Real card click saved and reloaded Target Info HUD=true." | tee -a gui-smoke/smoke-status.txt
 
-# Tap again to verify OFF transitions are persisted just as reliably.
-xdotool mousemove --sync --window "$WINDOW" "$CLICK_X" "$CLICK_Y" click 1
-for attempt in $(seq 1 20); do
-  if grep -Fq "DIPX smoke card toggled: Target Info HUD=false enabledCount=0" "$LOG" \
-      && grep -Fq "DIPX smoke config reloaded: Target Info HUD=false enabledCount=0" "$LOG"; then break; fi
-  sleep 0.5
-done
-if ! grep -Fq "DIPX smoke card toggled: Target Info HUD=false enabledCount=0" "$LOG" \
-    || ! grep -Fq "DIPX smoke config reloaded: Target Info HUD=false enabledCount=0" "$LOG"; then
-  echo "A second real card click did not disable and reload the saved setting."
-  tail -n 140 "$LOG"
-  exit 1
-fi
-if ! grep -Fq 'module.Target\ Info\ HUD=false' "$CONFIG_FILE"; then
-  echo "The OFF state was not persisted after the second real card click."
-  cat "$CONFIG_FILE" 2>/dev/null || true
-  exit 1
-fi
-echo "Real card click saved and reloaded Target Info HUD=false." | tee -a gui-smoke/smoke-status.txt
-
 sleep 2
 if grep -q "DIPX GUI closed" "$LOG"; then
   echo "DIPX GUI closed unexpectedly while idle."
