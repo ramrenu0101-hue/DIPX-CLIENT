@@ -3,6 +3,9 @@ set -euo pipefail
 
 : "${DIPX_PROJECT:?DIPX_PROJECT was not set by the build workflow}"
 mkdir -p gui-smoke
+SMOKE_CONFIG_DIR="$PWD/gui-smoke/config"
+rm -rf "$SMOKE_CONFIG_DIR"
+mkdir -p "$SMOKE_CONFIG_DIR"
 LOG="gui-smoke/runClient.log"
 export LIBGL_ALWAYS_SOFTWARE=1
 export MESA_GL_VERSION_OVERRIDE=4.5
@@ -14,7 +17,7 @@ timeout 8s xdpyinfo -display "${DISPLAY:?DISPLAY is required}" > gui-smoke/launc
 timeout 8s glxinfo -B > gui-smoke/launcher-glxinfo.txt 2>&1 || echo "Launcher GLX probe timed out; continuing to game launch." | tee -a gui-smoke/smoke-status.txt
 
 timeout 15s gradle --stop >/dev/null 2>&1 || echo "Gradle daemon stop timed out" | tee -a gui-smoke/smoke-status.txt
-export JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:+$JAVA_TOOL_OPTIONS }-Ddipx.smoke.gui=true"
+export JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:+$JAVA_TOOL_OPTIONS }-Ddipx.smoke.gui=true -Ddipx.smoke.configDir=$SMOKE_CONFIG_DIR"
 gradle -p "$DIPX_PROJECT" runClient --no-daemon --console=plain >"$LOG" 2>&1 &
 GRADLE_PID=$!
 OPENBOX_PID=""
@@ -155,6 +158,63 @@ if [[ "$COLOR_COUNT" -lt 16 ]]; then
   exit 1
 fi
 echo "Captured genuine running DIPX GUI screenshot: gui-smoke/DIPX-GUI.png ($DIMENSIONS, $COLOR_COUNT colors)" | tee -a gui-smoke/smoke-status.txt
+
+# Tap the first visible module card using X11 input, not a test-only method call.
+# The screen reports logical GUI coordinates; scale them to the actual Minecraft window.
+LAYOUT_LINE="$(grep -m 1 'DIPX smoke screen rendered size=' "$LOG" || true)"
+LAYOUT_VALUES="$(sed -nE 's/.*size=([0-9]+)x([0-9]+) firstCard=([0-9]+),([0-9]+),([0-9]+),([0-9]+) module=.*/\1 \2 \3 \4 \5 \6/p' <<< "$LAYOUT_LINE")"
+if [[ -z "$LAYOUT_VALUES" || "$LAYOUT_LINE" != *"module=Target Info HUD" ]]; then
+  echo "Could not resolve the first visible module card from the real GUI render."
+  tail -n 100 "$LOG"
+  exit 1
+fi
+read -r GUI_WIDTH GUI_HEIGHT CARD_X CARD_Y CARD_WIDTH CARD_HEIGHT <<< "$LAYOUT_VALUES"
+GEOMETRY="$(xdotool getwindowgeometry --shell "$WINDOW")"
+WINDOW_WIDTH="$(awk -F= '$1 == "WIDTH" {print $2}' <<< "$GEOMETRY")"
+WINDOW_HEIGHT="$(awk -F= '$1 == "HEIGHT" {print $2}' <<< "$GEOMETRY")"
+CLICK_X=$(((CARD_X + CARD_WIDTH / 2) * WINDOW_WIDTH / GUI_WIDTH))
+CLICK_Y=$(((CARD_Y + CARD_HEIGHT / 2) * WINDOW_HEIGHT / GUI_HEIGHT))
+CONFIG_FILE="$SMOKE_CONFIG_DIR/dipx-modules.properties"
+echo "Tapping real DIPX card at window coordinates $CLICK_X,$CLICK_Y (GUI $GUI_WIDTH x $GUI_HEIGHT)." | tee -a gui-smoke/smoke-status.txt
+
+xdotool mousemove --sync --window "$WINDOW" "$CLICK_X" "$CLICK_Y" click 1
+for attempt in $(seq 1 20); do
+  if grep -Fq "DIPX smoke card toggled: Target Info HUD=true enabledCount=1" "$LOG" \
+      && grep -Fq "DIPX smoke config reloaded: Target Info HUD=true enabledCount=1" "$LOG"; then break; fi
+  sleep 0.5
+done
+if ! grep -Fq "DIPX smoke card toggled: Target Info HUD=true enabledCount=1" "$LOG" \
+    || ! grep -Fq "DIPX smoke config reloaded: Target Info HUD=true enabledCount=1" "$LOG"; then
+  echo "A real click did not enable the first module and reload its saved setting."
+  tail -n 140 "$LOG"
+  exit 1
+fi
+if [[ ! -f "$CONFIG_FILE" ]] || ! grep -Fq 'module.Target\ Info\ HUD=true' "$CONFIG_FILE"; then
+  echo "The real module-card click did not persist Target Info HUD=true."
+  cat "$CONFIG_FILE" 2>/dev/null || true
+  exit 1
+fi
+echo "Real card click saved and reloaded Target Info HUD=true." | tee -a gui-smoke/smoke-status.txt
+
+# Tap again to verify OFF transitions are persisted just as reliably.
+xdotool mousemove --sync --window "$WINDOW" "$CLICK_X" "$CLICK_Y" click 1
+for attempt in $(seq 1 20); do
+  if grep -Fq "DIPX smoke card toggled: Target Info HUD=false enabledCount=0" "$LOG" \
+      && grep -Fq "DIPX smoke config reloaded: Target Info HUD=false enabledCount=0" "$LOG"; then break; fi
+  sleep 0.5
+done
+if ! grep -Fq "DIPX smoke card toggled: Target Info HUD=false enabledCount=0" "$LOG" \
+    || ! grep -Fq "DIPX smoke config reloaded: Target Info HUD=false enabledCount=0" "$LOG"; then
+  echo "A second real card click did not disable and reload the saved setting."
+  tail -n 140 "$LOG"
+  exit 1
+fi
+if ! grep -Fq 'module.Target\ Info\ HUD=false' "$CONFIG_FILE"; then
+  echo "The OFF state was not persisted after the second real card click."
+  cat "$CONFIG_FILE" 2>/dev/null || true
+  exit 1
+fi
+echo "Real card click saved and reloaded Target Info HUD=false." | tee -a gui-smoke/smoke-status.txt
 
 sleep 2
 if grep -q "DIPX GUI closed" "$LOG"; then

@@ -22,6 +22,7 @@ import net.minecraft.registry.Registries;
 import net.minecraft.text.Text;
 import org.lwjgl.glfw.GLFW;
 import java.io.IOException;
+import java.nio.file.Path;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -37,6 +38,15 @@ public final class DIPXClient implements ClientModInitializer {
     private static boolean smokeCloseInjected;
     private static final Logger LOGGER = LoggerFactory.getLogger("DIPX/Client");
 
+    /** Uses an isolated directory only in the CI interaction test. */
+    private static Path configDirectory() {
+        if (Boolean.getBoolean("dipx.smoke.gui")) {
+            String override = System.getProperty("dipx.smoke.configDir");
+            if (override != null && !override.isBlank()) return Path.of(override);
+        }
+        return FabricLoader.getInstance().getConfigDir();
+    }
+
     private static boolean enabled(String name) {
         for (DIPXModule module : ModuleRegistry.all()) {
             if (module.name().equals(name)) return module.enabled();
@@ -47,10 +57,39 @@ public final class DIPXClient implements ClientModInitializer {
     /** Saves module states immediately after a user changes a GUI toggle. */
     public static void saveModuleConfig() {
         try {
-            ModuleConfigStore.save(FabricLoader.getInstance().getConfigDir(), ModuleRegistry.all());
+            Path directory = configDirectory();
+            ModuleConfigStore.save(directory, ModuleRegistry.all());
+            if (Boolean.getBoolean("dipx.smoke.gui")) {
+                LOGGER.info("DIPX smoke config saved: {}",
+                        directory.resolve(ModuleConfigStore.FILE_NAME).toAbsolutePath());
+            }
         } catch (IOException | SecurityException configError) {
             LOGGER.warn("Could not save DIPX module settings", configError);
         }
+    }
+
+    /**
+     * In CI only, prove the just-saved state can be loaded from disk again.
+     * The temporary in-memory flip makes this a real save/load round-trip,
+     * not merely a check of the current module object.
+     */
+    public static void verifySmokeConfigReload(DIPXModule module) {
+        if (!Boolean.getBoolean("dipx.smoke.gui")) return;
+        boolean expected = module.enabled();
+        module.setEnabled(!expected);
+        try {
+            ModuleConfigStore.load(configDirectory(), ModuleRegistry.all());
+        } catch (IOException | SecurityException configError) {
+            LOGGER.error("DIPX smoke config reload failed", configError);
+            return;
+        }
+        if (module.enabled() != expected) {
+            LOGGER.error("DIPX smoke config reload mismatch: expected {} but found {}",
+                    expected, module.enabled());
+            return;
+        }
+        LOGGER.info("DIPX smoke config reloaded: {}={} enabledCount={}",
+                module.name(), module.enabled(), ModuleRegistry.enabledCount());
     }
 
     /** Restores the screen that was visible before DIPX was opened. */
@@ -68,7 +107,7 @@ public final class DIPXClient implements ClientModInitializer {
     public void onInitializeClient() {
         ModuleRegistry.registerDefaults();
         try {
-            ModuleConfigStore.load(FabricLoader.getInstance().getConfigDir(), ModuleRegistry.all());
+            ModuleConfigStore.load(configDirectory(), ModuleRegistry.all());
         } catch (IOException | SecurityException configError) {
             LOGGER.warn("Could not load DIPX module settings; using defaults", configError);
         }

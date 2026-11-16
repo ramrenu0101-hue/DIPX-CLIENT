@@ -170,7 +170,10 @@ public final class DIPXScreen extends Screen {
                     contentX, footerY + 5, 0xFF9E95AA, false);
             if (Boolean.getBoolean("dipx.smoke.gui") && !smokeRenderLogged) {
                 smokeRenderLogged = true;
-                LOGGER.info("DIPX smoke screen rendered");
+                String firstModule = modules.isEmpty() ? "none" : modules.get(start).name();
+                LOGGER.info("DIPX smoke screen rendered size={}x{} firstCard={},{},{},{} module={}",
+                        width, height, contentX, cardTop,
+                        layout.cardWidth(), layout.cardHeight(), firstModule);
             }
         } catch (RuntimeException renderError) {
             // Keep the screen alive after recoverable renderer errors, but retain
@@ -234,8 +237,14 @@ public final class DIPXScreen extends Screen {
             int by = cardTop + row * (layout.cardHeight() + layout.rowGap());
             if (mouseX >= bx && mouseX <= bx + layout.cardWidth()
                     && mouseY >= by && mouseY <= by + layout.cardHeight()) {
-                modules.get(i).toggle();
+                DIPXModule module = modules.get(i);
+                module.toggle();
                 DIPXClient.saveModuleConfig();
+                if (Boolean.getBoolean("dipx.smoke.gui")) {
+                    LOGGER.info("DIPX smoke card toggled: {}={} enabledCount={}",
+                            module.name(), module.enabled(), ModuleRegistry.enabledCount());
+                    DIPXClient.verifySmokeConfigReload(module);
+                }
                 return true;
             }
         }
