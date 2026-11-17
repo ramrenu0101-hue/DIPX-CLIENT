@@ -57,7 +57,7 @@ public final class ModuleRegistrySmokeTest {
         check(ModuleRegistry.enabledCount() == 0, "Enabled count did not reset");
 
         ModuleRegistry.registerDefaults();
-        check(ModuleRegistry.all().size() == 14, "Repeated registration duplicated modules");
+        check(ModuleRegistry.all().size() == 15, "Repeated registration duplicated modules");
 
         // Settings round-trip through a temporary config directory, never the user's config.
         java.nio.file.Path configDirectory = null;
