@@ -12,6 +12,7 @@ on:
       - 'ModuleRegistry.java'
       - 'ModuleCategory.java'
       - 'ModuleConfigStore.java'
+      - 'CombatHudTelemetry.java'
       - 'ci/**'
       - '.github/workflows/build.yml'
       - 'DIPX-Client-source-ready.zip'
@@ -52,6 +53,7 @@ jobs:
           cp ModuleRegistry.java "$SOURCE_ROOT/module/ModuleRegistry.java"
           cp ModuleCategory.java "$SOURCE_ROOT/module/ModuleCategory.java"
           cp ModuleConfigStore.java "$SOURCE_ROOT/module/ModuleConfigStore.java"
+          cp CombatHudTelemetry.java "$SOURCE_ROOT/module/CombatHudTelemetry.java"
           echo "DIPX_PROJECT=$PROJECT" >> "$GITHUB_ENV"
           echo "Project: $PROJECT"
           echo "Source root: $SOURCE_ROOT"
@@ -66,6 +68,7 @@ jobs:
             "$DIPX_PROJECT/src/client/java/com/dipx/client/module/ModuleCategory.java" \
             "$DIPX_PROJECT/src/client/java/com/dipx/client/module/ModuleRegistry.java" \
             "$DIPX_PROJECT/src/client/java/com/dipx/client/module/ModuleConfigStore.java" \
+            "$DIPX_PROJECT/src/client/java/com/dipx/client/module/CombatHudTelemetry.java" \
             "$DIPX_PROJECT/src/client/java/com/dipx/client/gui/DIPXLayout.java" \
             ci/ModuleRegistrySmokeTest.java
           java -cp /tmp/dipx-regression com.dipx.client.ci.ModuleRegistrySmokeTest
@@ -93,12 +96,14 @@ jobs:
           jar tf "$JAR" | grep -q com/dipx/client/gui/DIPXLayout.class
           jar tf "$JAR" | grep -q com/dipx/client/module/ModuleRegistry.class
           jar tf "$JAR" | grep -q com/dipx/client/module/ModuleConfigStore.class
+          jar tf "$JAR" | grep -q com/dipx/client/module/CombatHudTelemetry.class
+          grep -q "Spear Charge HUD" DIPXClient.java
           grep -q "ModuleConfigStore.load" DIPXClient.java
           grep -q "DIPXClient.saveModuleConfig()" DIPXScreen.java
           grep -q "private ModuleCategory selected = ModuleCategory.COMBAT;" DIPXScreen.java
           grep -q "else if (guiPressed)" DIPXClient.java
           grep -q "DIPXClient.closeGui()" DIPXScreen.java
-          test "$(grep -c 'add(pending,' ModuleRegistry.java)" -eq 14
+          test "$(grep -c 'add(pending,' ModuleRegistry.java)" -eq 15
           unzip -p "$JAR" fabric.mod.json | python3 -c "import json,sys; d=json.load(sys.stdin); assert d['id']=='dipx'; assert d['depends']['minecraft']=='=1.21.11'; assert 'com.dipx.client.DIPXClient' in d['entrypoints']['client']; print('Verified DIPX Fabric metadata and required classes')"
       - name: Prepare virtual display for real GUI smoke test
         run: |

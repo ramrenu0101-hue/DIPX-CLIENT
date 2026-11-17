@@ -319,6 +319,23 @@ public final class DIPXClient implements ClientModInitializer {
                 y += 12;
             }
 
+            // Manual spear telemetry only: read the active-use timer and the
+            // player's horizontal velocity; never trigger or release an attack.
+            if (enabled("Spear Charge HUD")) {
+                boolean chargingSpear = client.player.isUsingItem()
+                        && Registries.ITEM.getId(client.player.getActiveItem().getItem())
+                                .getPath().contains("spear");
+                int useTicks = chargingSpear ? client.player.getItemUseTime() : 0;
+                var velocity = client.player.getVelocity();
+                double horizontalSpeed = Math.sqrt(
+                        velocity.x * velocity.x + velocity.z * velocity.z);
+                String spearCharge = com.dipx.client.module.CombatHudTelemetry.spearChargeLine(
+                        chargingSpear, useTicks, horizontalSpeed);
+                drawContext.drawText(client.textRenderer, Text.literal(spearCharge),
+                        x, y, 0xFF9CE8FF, true);
+                y += 12;
+            }
+
             if (enabled("Weapon Swap HUD")) {
                 String held = client.player.getMainHandStack().isEmpty()
                         ? "Empty" : client.player.getMainHandStack().getName().getString();
