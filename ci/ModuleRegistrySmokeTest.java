@@ -19,7 +19,7 @@ public final class ModuleRegistrySmokeTest {
     public static void main(String[] args) {
         ModuleRegistry.registerDefaults();
         List<DIPXModule> modules = ModuleRegistry.all();
-        check(modules.size() == 15, "Expected 15 implemented modules, got " + modules.size());
+        check(modules.size() == 16, "Expected 16 implemented modules, got " + modules.size());
         check(ModuleRegistry.enabledCount() == 0, "Modules must start disabled");
 
         Set<String> names = new HashSet<>();
@@ -38,6 +38,7 @@ public final class ModuleRegistrySmokeTest {
         check(names.contains("Attack Cooldown HUD"), "Manual attack timing HUD is missing");
         check(names.contains("Spear Assist HUD"), "Manual spear helper HUD is missing");
         check(names.contains("Spear Charge HUD"), "Manual spear charge telemetry HUD is missing");
+        check(names.contains("Movement Telemetry HUD"), "Movement telemetry HUD is missing");
 
         String idleSpear = com.dipx.client.module.CombatHudTelemetry.spearChargeLine(false, 0, 0.0);
         check(idleSpear.equals("Spear charge: IDLE | Horizontal speed: 0.00 b/t"),
@@ -49,6 +50,23 @@ public final class ModuleRegistrySmokeTest {
         check(sanitizedSpear.equals("Spear charge: 0t | Horizontal speed: 0.00 b/t"),
                 "Invalid telemetry inputs were not sanitized: " + sanitizedSpear);
 
+        String groundedMovement = com.dipx.client.module.MovementHudTelemetry.movementLine(
+                0.0, 0.0, true, false, false);
+        check(groundedMovement.equals("Move: 0.00 b/t | Y: +0.00 | GROUND | NORMAL"),
+                "Grounded movement telemetry is incorrect: " + groundedMovement);
+        String sprintFall = com.dipx.client.module.MovementHudTelemetry.movementLine(
+                0.42, -0.18, false, true, false);
+        check(sprintFall.equals("Move: 0.42 b/t | Y: -0.18 | AIR | SPRINT"),
+                "Airborne sprint telemetry is incorrect: " + sprintFall);
+        String sneaking = com.dipx.client.module.MovementHudTelemetry.movementLine(
+                0.05, 0.0, true, false, true);
+        check(sneaking.equals("Move: 0.05 b/t | Y: +0.00 | GROUND | SNEAK"),
+                "Sneak state telemetry is incorrect: " + sneaking);
+        String sanitizedMovement = com.dipx.client.module.MovementHudTelemetry.movementLine(
+                Double.NaN, Double.POSITIVE_INFINITY, false, false, false);
+        check(sanitizedMovement.equals("Move: 0.00 b/t | Y: +0.00 | AIR | NORMAL"),
+                "Non-finite movement inputs were not sanitized: " + sanitizedMovement);
+
         DIPXModule first = modules.get(0);
         first.toggle();
         check(first.enabled(), "Toggle did not enable the module");
@@ -57,7 +75,7 @@ public final class ModuleRegistrySmokeTest {
         check(ModuleRegistry.enabledCount() == 0, "Enabled count did not reset");
 
         ModuleRegistry.registerDefaults();
-        check(ModuleRegistry.all().size() == 15, "Repeated registration duplicated modules");
+        check(ModuleRegistry.all().size() == 16, "Repeated registration duplicated modules");
 
         // Settings round-trip through a temporary config directory, never the user's config.
         java.nio.file.Path configDirectory = null;
@@ -152,7 +170,7 @@ public final class ModuleRegistrySmokeTest {
             }
         }
 
-        System.out.println("DIPX regression checks passed: 15 modules, spear charge telemetry, idempotent registry, "
+        System.out.println("DIPX regression checks passed: 16 modules, spear and movement telemetry, idempotent registry, "
                 + "enabled counter, immutable snapshot, and responsive layouts.");
     }
 }

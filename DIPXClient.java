@@ -336,6 +336,19 @@ public final class DIPXClient implements ClientModInitializer {
                 y += 12;
             }
 
+            // Read-only movement telemetry for clutch timing and aerial mace play.
+            if (enabled("Movement Telemetry HUD")) {
+                var velocity = client.player.getVelocity();
+                double horizontalSpeed = Math.sqrt(
+                        velocity.x * velocity.x + velocity.z * velocity.z);
+                String movementLine = com.dipx.client.module.MovementHudTelemetry.movementLine(
+                        horizontalSpeed, velocity.y, client.player.isOnGround(),
+                        client.player.isSprinting(), client.player.isSneaking());
+                drawContext.drawText(client.textRenderer, Text.literal(movementLine),
+                        x, y, 0xFFB7D8FF, true);
+                y += 12;
+            }
+
             if (enabled("Weapon Swap HUD")) {
                 String held = client.player.getMainHandStack().isEmpty()
                         ? "Empty" : client.player.getMainHandStack().getName().getString();
