@@ -18,6 +18,7 @@ import net.minecraft.entity.EquipmentSlot;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.util.hit.EntityHitResult;
 import net.minecraft.item.Items;
+import net.minecraft.item.MaceItem;
 import net.minecraft.registry.Registries;
 import net.minecraft.text.Text;
 import org.lwjgl.glfw.GLFW;
@@ -377,10 +378,14 @@ public final class DIPXClient implements ClientModInitializer {
             }
 
             if (enabled("Mace Smash HUD")) {
-                double fall = client.player.fallDistance;
-                drawContext.drawText(client.textRenderer,
-                        Text.literal(String.format(java.util.Locale.ROOT, "Fall: %.1f blocks", fall)),
-                        x, y, 0xFFFF9B75, true);
+                var velocity = client.player.getVelocity();
+                boolean maceHeld = client.player.getMainHandStack().getItem() == Items.MACE;
+                boolean vanillaSmashReady = MaceItem.shouldDealAdditionalDamage(client.player);
+                String impactLine = com.dipx.client.module.MaceImpactTelemetry.impactLine(
+                        maceHeld, vanillaSmashReady, client.player.fallDistance, velocity.y);
+                drawContext.drawText(client.textRenderer, Text.literal(impactLine),
+                        x, y, vanillaSmashReady && maceHeld ? 0xFF9AF5BD : 0xFFFF9B75, true);
+                y += 12;
             }
         });
     }

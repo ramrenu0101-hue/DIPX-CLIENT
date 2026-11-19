@@ -14,6 +14,7 @@ on:
       - 'ModuleConfigStore.java'
       - 'CombatHudTelemetry.java'
       - 'MovementHudTelemetry.java'
+      - 'MaceImpactTelemetry.java'
       - 'ci/**'
       - '.github/workflows/build.yml'
       - 'DIPX-Client-source-ready.zip'
@@ -56,6 +57,7 @@ jobs:
           cp ModuleConfigStore.java "$SOURCE_ROOT/module/ModuleConfigStore.java"
           cp CombatHudTelemetry.java "$SOURCE_ROOT/module/CombatHudTelemetry.java"
           cp MovementHudTelemetry.java "$SOURCE_ROOT/module/MovementHudTelemetry.java"
+          cp MaceImpactTelemetry.java "$SOURCE_ROOT/module/MaceImpactTelemetry.java"
           echo "DIPX_PROJECT=$PROJECT" >> "$GITHUB_ENV"
           echo "Project: $PROJECT"
           echo "Source root: $SOURCE_ROOT"
@@ -72,6 +74,7 @@ jobs:
             "$DIPX_PROJECT/src/client/java/com/dipx/client/module/ModuleConfigStore.java" \
             "$DIPX_PROJECT/src/client/java/com/dipx/client/module/CombatHudTelemetry.java" \
             "$DIPX_PROJECT/src/client/java/com/dipx/client/module/MovementHudTelemetry.java" \
+            "$DIPX_PROJECT/src/client/java/com/dipx/client/module/MaceImpactTelemetry.java" \
             "$DIPX_PROJECT/src/client/java/com/dipx/client/gui/DIPXLayout.java" \
             ci/ModuleRegistrySmokeTest.java
           java -cp /tmp/dipx-regression com.dipx.client.ci.ModuleRegistrySmokeTest
@@ -101,8 +104,11 @@ jobs:
           jar tf "$JAR" | grep -q com/dipx/client/module/ModuleConfigStore.class
           jar tf "$JAR" | grep -q com/dipx/client/module/CombatHudTelemetry.class
           jar tf "$JAR" | grep -q com/dipx/client/module/MovementHudTelemetry.class
+          jar tf "$JAR" | grep -q com/dipx/client/module/MaceImpactTelemetry.class
           grep -q "Spear Charge HUD" DIPXClient.java
           grep -q "Movement Telemetry HUD" DIPXClient.java
+          grep -q "MaceImpactTelemetry.impactLine" DIPXClient.java
+          grep -q "MaceItem.shouldDealAdditionalDamage" DIPXClient.java
           grep -q "ModuleConfigStore.load" DIPXClient.java
           grep -q "DIPXClient.saveModuleConfig()" DIPXScreen.java
           grep -q "private ModuleCategory selected = ModuleCategory.COMBAT;" DIPXScreen.java

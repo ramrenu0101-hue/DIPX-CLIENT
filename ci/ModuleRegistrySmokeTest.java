@@ -67,6 +67,31 @@ public final class ModuleRegistrySmokeTest {
         check(sanitizedMovement.equals("Move: 0.00 b/t | Y: +0.00 | AIR | NORMAL"),
                 "Non-finite movement inputs were not sanitized: " + sanitizedMovement);
 
+        String maceNotHeld = com.dipx.client.module.MaceImpactTelemetry.impactLine(
+                false, true, 3.0, -0.4);
+        check(maceNotHeld.equals("Mace: NOT HELD | Fall: 3.0 | Down: 0.40 b/t"),
+                "Mace HUD must not claim readiness when the mace is not held: " + maceNotHeld);
+        String maceReady = com.dipx.client.module.MaceImpactTelemetry.impactLine(
+                true, true, 2.2, -0.55);
+        check(maceReady.equals("Mace: SMASH READY | Fall: 2.2 | Down: 0.55 b/t"),
+                "Vanilla smash-ready state was not shown: " + maceReady);
+        String maceBuilding = com.dipx.client.module.MaceImpactTelemetry.impactLine(
+                true, false, 0.7, -0.20);
+        check(maceBuilding.equals("Mace: BUILDING | 0.8 to 1.5 fall | Down: 0.20 b/t"),
+                "Mace fall-distance guidance is incorrect: " + maceBuilding);
+        String macePending = com.dipx.client.module.MaceImpactTelemetry.impactLine(
+                true, false, 1.6, -0.15);
+        check(macePending.equals("Mace: FALLING | Vanilla check pending | Fall: 1.6 | Down: 0.15 b/t"),
+                "Mace HUD must defer to the vanilla readiness predicate: " + macePending);
+        String maceWaiting = com.dipx.client.module.MaceImpactTelemetry.impactLine(
+                true, false, 0.0, 0.0);
+        check(maceWaiting.equals("Mace: WAIT | Fall: 0.0 | Down: 0.00 b/t"),
+                "Mace idle state is incorrect: " + maceWaiting);
+        String maceSanitized = com.dipx.client.module.MaceImpactTelemetry.impactLine(
+                true, false, Double.NaN, Double.NEGATIVE_INFINITY);
+        check(maceSanitized.equals("Mace: WAIT | Fall: 0.0 | Down: 0.00 b/t"),
+                "Invalid Mace telemetry inputs were not sanitized: " + maceSanitized);
+
         DIPXModule first = modules.get(0);
         first.toggle();
         check(first.enabled(), "Toggle did not enable the module");
@@ -170,7 +195,7 @@ public final class ModuleRegistrySmokeTest {
             }
         }
 
-        System.out.println("DIPX regression checks passed: 16 modules, spear and movement telemetry, idempotent registry, "
+        System.out.println("DIPX regression checks passed: 16 modules, Mace/Spear and movement telemetry, idempotent registry, "
                 + "enabled counter, immutable snapshot, and responsive layouts.");
     }
 }
