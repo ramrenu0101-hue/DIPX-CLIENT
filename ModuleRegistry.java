@@ -37,6 +37,7 @@ public final class ModuleRegistry {
         add(pending, "Mace Inventory HUD", "Mace count", ModuleCategory.MACE_PVP);
         add(pending, "Spear Inventory HUD", "Spear count", ModuleCategory.SPEAR_PVP);
         add(pending, "Breach Status HUD", "Target armor status", ModuleCategory.COMBAT);
+        add(pending, "Shield Status HUD", "Crosshair player shield state and durability", ModuleCategory.COMBAT);
         add(pending, "Weapon Swap HUD", "Held item and slot", ModuleCategory.COMBAT);
         add(pending, "Attack Cooldown HUD", "Manual attack timing", ModuleCategory.COMBAT);
         add(pending, "Spear Assist HUD", "Spear hotbar slot and target range", ModuleCategory.SPEAR_PVP);

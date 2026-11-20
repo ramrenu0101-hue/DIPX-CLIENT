@@ -377,6 +377,34 @@ public final class DIPXClient implements ClientModInitializer {
                 y += 12;
             }
 
+            // Manual shield information only: inspect the player already under the crosshair.
+            if (enabled("Shield Status HUD")) {
+                String shieldLine;
+                if (client.crosshairTarget instanceof EntityHitResult shieldHit
+                        && shieldHit.getEntity() instanceof PlayerEntity targetShieldPlayer) {
+                    var activeStack = targetShieldPlayer.getActiveItem();
+                    var mainStack = targetShieldPlayer.getMainHandStack();
+                    var offStack = targetShieldPlayer.getOffHandStack();
+                    var shieldStack = targetShieldPlayer.isUsingItem()
+                            && activeStack.getItem() == Items.SHIELD
+                            ? activeStack
+                            : mainStack.getItem() == Items.SHIELD ? mainStack
+                            : offStack.getItem() == Items.SHIELD ? offStack : null;
+                    boolean hasShield = shieldStack != null;
+                    int maximum = hasShield ? shieldStack.getMaxDamage() : 0;
+                    int remaining = hasShield
+                            ? Math.max(0, maximum - shieldStack.getDamage()) : 0;
+                    shieldLine = com.dipx.client.module.ShieldStatusTelemetry.shieldLine(
+                            true, hasShield, targetShieldPlayer.isBlocking(), remaining, maximum);
+                } else {
+                    shieldLine = com.dipx.client.module.ShieldStatusTelemetry.shieldLine(
+                            false, false, false, 0, 0);
+                }
+                drawContext.drawText(client.textRenderer, Text.literal(shieldLine),
+                        x, y, 0xFFFFC68A, true);
+                y += 12;
+            }
+
             if (enabled("Mace Smash HUD")) {
                 var velocity = client.player.getVelocity();
                 boolean maceHeld = client.player.getMainHandStack().getItem() == Items.MACE;

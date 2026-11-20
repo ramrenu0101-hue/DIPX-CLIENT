@@ -19,7 +19,7 @@ public final class ModuleRegistrySmokeTest {
     public static void main(String[] args) {
         ModuleRegistry.registerDefaults();
         List<DIPXModule> modules = ModuleRegistry.all();
-        check(modules.size() == 16, "Expected 16 implemented modules, got " + modules.size());
+        check(modules.size() == 17, "Expected 17 implemented modules, got " + modules.size());
         check(ModuleRegistry.enabledCount() == 0, "Modules must start disabled");
 
         Set<String> names = new HashSet<>();
@@ -38,6 +38,7 @@ public final class ModuleRegistrySmokeTest {
         check(names.contains("Attack Cooldown HUD"), "Manual attack timing HUD is missing");
         check(names.contains("Spear Assist HUD"), "Manual spear helper HUD is missing");
         check(names.contains("Spear Charge HUD"), "Manual spear charge telemetry HUD is missing");
+        check(names.contains("Shield Status HUD"), "Manual shield status HUD is missing");
         check(names.contains("Movement Telemetry HUD"), "Movement telemetry HUD is missing");
 
         String idleSpear = com.dipx.client.module.CombatHudTelemetry.spearChargeLine(false, 0, 0.0);
@@ -92,6 +93,27 @@ public final class ModuleRegistrySmokeTest {
         check(maceSanitized.equals("Mace: WAIT | Fall: 0.0 | Down: 0.00 b/t"),
                 "Invalid Mace telemetry inputs were not sanitized: " + maceSanitized);
 
+        String noPlayerTarget = com.dipx.client.module.ShieldStatusTelemetry.shieldLine(
+                false, true, true, 20, 336);
+        check(noPlayerTarget.equals("Shield: NO PLAYER TARGET"),
+                "Shield HUD must ignore non-player crosshair targets: " + noPlayerTarget);
+        String noShield = com.dipx.client.module.ShieldStatusTelemetry.shieldLine(
+                true, false, false, 0, 0);
+        check(noShield.equals("Shield: NONE"),
+                "Shield HUD reported a shield when none is carried: " + noShield);
+        String blockingShield = com.dipx.client.module.ShieldStatusTelemetry.shieldLine(
+                true, true, true, 252, 336);
+        check(blockingShield.equals("Shield: BLOCKING | Durability: 252/336 (75%)"),
+                "Blocking shield status is incorrect: " + blockingShield);
+        String carriedLowShield = com.dipx.client.module.ShieldStatusTelemetry.shieldLine(
+                true, true, false, 50, 336);
+        check(carriedLowShield.equals("Shield: CARRIED | Durability: 50/336 (15%) | LOW"),
+                "Low shield durability warning is incorrect: " + carriedLowShield);
+        String unknownShieldDurability = com.dipx.client.module.ShieldStatusTelemetry.shieldLine(
+                true, true, false, -4, 0);
+        check(unknownShieldDurability.equals("Shield: CARRIED | Durability: unknown"),
+                "Unknown or invalid shield durability was not handled: " + unknownShieldDurability);
+
         DIPXModule first = modules.get(0);
         first.toggle();
         check(first.enabled(), "Toggle did not enable the module");
@@ -100,7 +122,7 @@ public final class ModuleRegistrySmokeTest {
         check(ModuleRegistry.enabledCount() == 0, "Enabled count did not reset");
 
         ModuleRegistry.registerDefaults();
-        check(ModuleRegistry.all().size() == 16, "Repeated registration duplicated modules");
+        check(ModuleRegistry.all().size() == 17, "Repeated registration duplicated modules");
 
         // Settings round-trip through a temporary config directory, never the user's config.
         java.nio.file.Path configDirectory = null;
@@ -195,7 +217,7 @@ public final class ModuleRegistrySmokeTest {
             }
         }
 
-        System.out.println("DIPX regression checks passed: 16 modules, Mace/Spear and movement telemetry, idempotent registry, "
+        System.out.println("DIPX regression checks passed: 17 modules, shield/Mace/Spear and movement telemetry, idempotent registry, "
                 + "enabled counter, immutable snapshot, and responsive layouts.");
     }
 }
