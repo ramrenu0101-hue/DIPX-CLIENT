@@ -19,7 +19,7 @@ public final class ModuleRegistrySmokeTest {
     public static void main(String[] args) {
         ModuleRegistry.registerDefaults();
         List<DIPXModule> modules = ModuleRegistry.all();
-        check(modules.size() == 17, "Expected 17 implemented modules, got " + modules.size());
+        check(modules.size() == 18, "Expected 18 implemented modules, got " + modules.size());
         check(ModuleRegistry.enabledCount() == 0, "Modules must start disabled");
 
         Set<String> names = new HashSet<>();
@@ -40,6 +40,7 @@ public final class ModuleRegistrySmokeTest {
         check(names.contains("Spear Charge HUD"), "Manual spear charge telemetry HUD is missing");
         check(names.contains("Shield Status HUD"), "Manual shield status HUD is missing");
         check(names.contains("Movement Telemetry HUD"), "Movement telemetry HUD is missing");
+        check(names.contains("Pearl Trajectory HUD"), "Pearl trajectory preview module is missing");
 
         String idleSpear = com.dipx.client.module.CombatHudTelemetry.spearChargeLine(false, 0, 0.0);
         check(idleSpear.equals("Spear charge: IDLE | Horizontal speed: 0.00 b/t"),
@@ -114,6 +115,59 @@ public final class ModuleRegistrySmokeTest {
         check(unknownShieldDurability.equals("Shield: CARRIED | Durability: unknown"),
                 "Unknown or invalid shield durability was not handled: " + unknownShieldDurability);
 
+        var pearlOrigin = new com.dipx.client.module.PearlTrajectoryTelemetry.Point(0, 0, 0, 0);
+        var clearPearl = com.dipx.client.module.PearlTrajectoryTelemetry.trace(
+                pearlOrigin, 1.5, 0.0, 0.0, 0.03, 6,
+                (from, to, tick) -> null,
+                point -> new com.dipx.client.module.PearlTrajectoryTelemetry.DragSample(0.99, false));
+        check(clearPearl.stopReason() == com.dipx.client.module.PearlTrajectoryTelemetry.StopReason.RANGE_LIMIT
+                        && clearPearl.ticks() == 6 && clearPearl.points().size() == 7,
+                "Clear pearl trajectory did not respect its bounded tick budget");
+        check(clearPearl.horizontalRange() > 7.0 && clearPearl.heightDelta() < 0.0,
+                "Pearl drag/gravity simulation did not advance horizontally and fall vertically");
+
+        var blockPearl = com.dipx.client.module.PearlTrajectoryTelemetry.trace(
+                pearlOrigin, 1.0, 0.0, 0.0, 0.03, 10,
+                (from, to, tick) -> tick == 3
+                        ? new com.dipx.client.module.PearlTrajectoryTelemetry.Collision(
+                                com.dipx.client.module.PearlTrajectoryTelemetry.StopReason.BLOCK,
+                                new com.dipx.client.module.PearlTrajectoryTelemetry.Point(
+                                        to.x(), to.y(), to.z(), tick))
+                        : null,
+                point -> new com.dipx.client.module.PearlTrajectoryTelemetry.DragSample(0.99, false));
+        check(blockPearl.stopReason() == com.dipx.client.module.PearlTrajectoryTelemetry.StopReason.BLOCK
+                        && blockPearl.ticks() == 3,
+                "Block collision was not reported at the first hit tick");
+
+        var entityPearl = com.dipx.client.module.PearlTrajectoryTelemetry.trace(
+                pearlOrigin, 1.0, 0.0, 0.0, 0.03, 10,
+                (from, to, tick) -> tick == 2
+                        ? new com.dipx.client.module.PearlTrajectoryTelemetry.Collision(
+                                com.dipx.client.module.PearlTrajectoryTelemetry.StopReason.ENTITY, to)
+                        : null,
+                point -> new com.dipx.client.module.PearlTrajectoryTelemetry.DragSample(0.99, false));
+        check(entityPearl.stopReason() == com.dipx.client.module.PearlTrajectoryTelemetry.StopReason.ENTITY
+                        && entityPearl.ticks() == 2,
+                "Entity collision guidance was not reported");
+
+        var waterPearl = com.dipx.client.module.PearlTrajectoryTelemetry.trace(
+                pearlOrigin, 1.0, 0.2, 0.0, 0.03, 4, (from, to, tick) -> null,
+                point -> new com.dipx.client.module.PearlTrajectoryTelemetry.DragSample(0.8, true));
+        check(waterPearl.touchedFluid(), "Water drag was not marked as an approximate fluid path");
+        check(com.dipx.client.module.PearlTrajectoryTelemetry.summary(false, clearPearl)
+                        .equals("Pearl path: NO PEARL IN INVENTORY"),
+                "Missing-pearl status is incorrect");
+        check(com.dipx.client.module.PearlTrajectoryTelemetry.summary(true, blockPearl)
+                        .contains("BLOCK HIT @ 3t"),
+                "Block collision summary is incorrect");
+        var invalidPearl = com.dipx.client.module.PearlTrajectoryTelemetry.trace(
+                pearlOrigin, Double.NaN, 0.0, 0.0, 0.03, 10,
+                (from, to, tick) -> null,
+                point -> new com.dipx.client.module.PearlTrajectoryTelemetry.DragSample(0.99, false));
+        check(invalidPearl.stopReason() == com.dipx.client.module.PearlTrajectoryTelemetry.StopReason.UNAVAILABLE
+                        && invalidPearl.points().isEmpty(),
+                "Invalid pearl trajectory input was not rejected safely");
+
         DIPXModule first = modules.get(0);
         first.toggle();
         check(first.enabled(), "Toggle did not enable the module");
@@ -122,7 +176,7 @@ public final class ModuleRegistrySmokeTest {
         check(ModuleRegistry.enabledCount() == 0, "Enabled count did not reset");
 
         ModuleRegistry.registerDefaults();
-        check(ModuleRegistry.all().size() == 17, "Repeated registration duplicated modules");
+        check(ModuleRegistry.all().size() == 18, "Repeated registration duplicated modules");
 
         // Settings round-trip through a temporary config directory, never the user's config.
         java.nio.file.Path configDirectory = null;
@@ -217,7 +271,7 @@ public final class ModuleRegistrySmokeTest {
             }
         }
 
-        System.out.println("DIPX regression checks passed: 17 modules, shield/Mace/Spear and movement telemetry, idempotent registry, "
+        System.out.println("DIPX regression checks passed: 18 modules, pearl/shield/Mace/Spear and movement telemetry, idempotent registry, "
                 + "enabled counter, immutable snapshot, and responsive layouts.");
     }
 }

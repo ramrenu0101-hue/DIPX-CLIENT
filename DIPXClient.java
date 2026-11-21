@@ -4,6 +4,7 @@ import com.dipx.client.gui.DIPXScreen;
 import com.dipx.client.module.DIPXModule;
 import com.dipx.client.module.ModuleRegistry;
 import com.dipx.client.module.ModuleConfigStore;
+import com.dipx.client.module.PearlTrajectoryTelemetry;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.loader.api.FabricLoader;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
@@ -11,13 +12,22 @@ import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
 import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.screen.Screen;
+import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.util.InputUtil;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.EquipmentSlot;
 import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.entity.projectile.ProjectileUtil;
+import net.minecraft.entity.projectile.thrown.EnderPearlEntity;
 import net.minecraft.util.hit.EntityHitResult;
+import net.minecraft.util.hit.BlockHitResult;
+import net.minecraft.util.hit.HitResult;
+import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.Vec3d;
+import net.minecraft.registry.tag.FluidTags;
 import net.minecraft.item.Items;
+import net.minecraft.item.EnderPearlItem;
 import net.minecraft.item.MaceItem;
 import net.minecraft.registry.Registries;
 import net.minecraft.text.Text;
@@ -37,7 +47,193 @@ public final class DIPXClient implements ClientModInitializer {
     private static boolean smokeOnboardingDismissed;
     private static boolean smokeOpenInjected;
     private static boolean smokeCloseInjected;
+    private static PearlTrajectoryTelemetry.Preview pearlPreview = PearlTrajectoryTelemetry.unavailable();
+    private static boolean pearlAvailable;
+    private static int lastPearlPreviewTick = Integer.MIN_VALUE;
+    private static boolean pearlPreviewFailureLogged;
     private static final Logger LOGGER = LoggerFactory.getLogger("DIPX/Client");
+
+    private static boolean hasEnderPearl(PlayerEntity player) {
+        if (player.getOffHandStack().isOf(Items.ENDER_PEARL)) return true;
+        for (int slot = 0; slot < player.getInventory().size(); slot++) {
+            if (player.getInventory().getStack(slot).isOf(Items.ENDER_PEARL)) return true;
+        }
+        return false;
+    }
+
+    /**
+     * Rebuilds a centreline preview at most every five ticks. The temporary
+     * projectile is never added to the world; it only supplies vanilla launch
+     * direction/owner velocity and ProjectileUtil collision queries.
+     */
+    private static void updatePearlPreview(MinecraftClient client) {
+        if (!enabled("Pearl Trajectory HUD") || client.player == null || client.world == null) {
+            pearlAvailable = false;
+            pearlPreview = PearlTrajectoryTelemetry.unavailable();
+            lastPearlPreviewTick = Integer.MIN_VALUE;
+            return;
+        }
+        if (lastPearlPreviewTick != Integer.MIN_VALUE
+                && client.player.age >= lastPearlPreviewTick
+                && client.player.age - lastPearlPreviewTick < 5) {
+            return;
+        }
+        lastPearlPreviewTick = client.player.age;
+        pearlAvailable = hasEnderPearl(client.player);
+        if (!pearlAvailable) {
+            pearlPreview = PearlTrajectoryTelemetry.unavailable();
+            return;
+        }
+
+        try {
+            PlayerEntity player = client.player;
+            EnderPearlEntity probe = new EnderPearlEntity(
+                    client.world, player, Items.ENDER_PEARL.getDefaultStack());
+            // Zero divergence draws the vanilla aim centreline. Real throws
+            // include a tiny random spread, so the displayed path is an estimate.
+            probe.setVelocity(player, player.getPitch(), player.getYaw(),
+                    0.0F, EnderPearlItem.POWER, 0.0F);
+            Vec3d origin = new Vec3d(probe.getX(), probe.getY(), probe.getZ());
+            Vec3d velocity = probe.getVelocity();
+
+            pearlPreview = PearlTrajectoryTelemetry.trace(
+                    new PearlTrajectoryTelemetry.Point(origin.x, origin.y, origin.z, 0),
+                    velocity.x, velocity.y, velocity.z, 0.03, 48,
+                    (from, to, tick) -> {
+                        probe.setPosition(from.x(), from.y(), from.z());
+                        probe.setVelocityClient(new Vec3d(
+                                to.x() - from.x(), to.y() - from.y(), to.z() - from.z()));
+                        HitResult hit = ProjectileUtil.getCollision(
+                                probe, candidate -> candidate != player && candidate.canHit());
+                        if (hit.getType() == HitResult.Type.MISS) return null;
+
+                        PearlTrajectoryTelemetry.StopReason reason;
+                        if (hit instanceof BlockHitResult) {
+                            reason = PearlTrajectoryTelemetry.StopReason.BLOCK;
+                        } else if (hit instanceof EntityHitResult) {
+                            reason = PearlTrajectoryTelemetry.StopReason.ENTITY;
+                        } else {
+                            return null;
+                        }
+                        Vec3d hitPos = hit.getPos();
+                        return new PearlTrajectoryTelemetry.Collision(reason,
+                                new PearlTrajectoryTelemetry.Point(
+                                        hitPos.x, hitPos.y, hitPos.z, tick));
+                    },
+                    point -> {
+                        boolean water = client.world.getFluidState(BlockPos.ofFloored(
+                                point.x(), point.y(), point.z())).isIn(FluidTags.WATER);
+                        return new PearlTrajectoryTelemetry.DragSample(water ? 0.8 : 0.99, water);
+                    });
+        } catch (RuntimeException previewError) {
+            pearlPreview = PearlTrajectoryTelemetry.unavailable();
+            if (!pearlPreviewFailureLogged) {
+                pearlPreviewFailureLogged = true;
+                LOGGER.warn("Pearl trajectory preview unavailable; client remains active", previewError);
+            }
+        }
+    }
+
+    /** Draws a compact side-view arc so it remains readable on touch screens. */
+    private static void drawPearlGraph(DrawContext context, MinecraftClient client,
+                                       PearlTrajectoryTelemetry.Preview preview) {
+        if (preview == null || preview.points().size() < 2) return;
+        int screenWidth = client.getWindow().getScaledWidth();
+        int screenHeight = client.getWindow().getScaledHeight();
+        if (screenWidth < 84 || screenHeight < 66) return;
+
+        int panelWidth = Math.min(146, screenWidth - 12);
+        int panelHeight = Math.min(78, screenHeight - 12);
+        int panelX = screenWidth - panelWidth - 6;
+        int panelY = screenHeight - panelHeight - 6;
+        context.fill(panelX, panelY, panelX + panelWidth, panelY + panelHeight, 0xC70E0B15);
+        context.fill(panelX, panelY, panelX + panelWidth, panelY + 2, 0xFF9B6BD0);
+        context.drawText(client.textRenderer, "PEARL PATH · CENTERLINE",
+                panelX + 5, panelY + 5, 0xFFE9D8FF, false);
+
+        int plotX = panelX + 5;
+        int plotY = panelY + 18;
+        int plotWidth = panelWidth - 10;
+        int plotHeight = panelHeight - 30;
+        if (plotWidth < 4 || plotHeight < 4) return;
+
+        var points = preview.points();
+        var origin = points.get(0);
+        double minHeight = Double.POSITIVE_INFINITY;
+        double maxHeight = Double.NEGATIVE_INFINITY;
+        double maxDistance = 0.0;
+        for (var point : points) {
+            double heightDelta = point.y() - origin.y();
+            double distance = Math.hypot(point.x() - origin.x(), point.z() - origin.z());
+            minHeight = Math.min(minHeight, heightDelta);
+            maxHeight = Math.max(maxHeight, heightDelta);
+            maxDistance = Math.max(maxDistance, distance);
+        }
+        if (maxDistance < 0.01) maxDistance = 1.0;
+        if (maxHeight - minHeight < 0.01) {
+            minHeight -= 0.5;
+            maxHeight += 0.5;
+        }
+        if (minHeight <= 0.0 && maxHeight >= 0.0) {
+            int groundY = plotY + (int) Math.round(
+                    (maxHeight / (maxHeight - minHeight)) * (plotHeight - 1));
+            context.fill(plotX, groundY, plotX + plotWidth, groundY + 1, 0x553F3850);
+        }
+
+        int previousX = -1;
+        int previousY = -1;
+        int endpointColor = switch (preview.stopReason()) {
+            case BLOCK -> 0xFFFFA16E;
+            case ENTITY -> 0xFF8DE6FF;
+            case RANGE_LIMIT -> 0xFFBBA6D8;
+            case UNAVAILABLE -> 0xFF77717F;
+        };
+        for (int i = 0; i < points.size(); i++) {
+            var point = points.get(i);
+            double distance = Math.hypot(point.x() - origin.x(), point.z() - origin.z());
+            double heightDelta = point.y() - origin.y();
+            int px = plotX + (int) Math.round(distance / maxDistance * (plotWidth - 1));
+            int py = plotY + (int) Math.round(
+                    (maxHeight - heightDelta) / (maxHeight - minHeight) * (plotHeight - 1));
+            int color = i == points.size() - 1 ? endpointColor : 0xFFD9B7FF;
+            if (previousX >= 0) {
+                drawPearlGraphLine(context, previousX, previousY, px, py,
+                        plotX, plotY, plotX + plotWidth, plotY + plotHeight, 0xFFD9B7FF);
+            }
+            context.fill(px - 1, py - 1, px + 2, py + 2, color);
+            previousX = px;
+            previousY = py;
+        }
+
+        String footer = PearlTrajectoryTelemetry.graphFooter(preview);
+        context.drawText(client.textRenderer,
+                client.textRenderer.trimToWidth(footer, panelWidth - 10),
+                panelX + 5, panelY + panelHeight - 10, endpointColor, false);
+    }
+
+    private static void drawPearlGraphLine(DrawContext context, int x0, int y0, int x1, int y1,
+                                           int left, int top, int right, int bottom, int color) {
+        int dx = Math.abs(x1 - x0);
+        int sx = x0 < x1 ? 1 : -1;
+        int dy = -Math.abs(y1 - y0);
+        int sy = y0 < y1 ? 1 : -1;
+        int error = dx + dy;
+        while (true) {
+            if (x0 >= left && x0 < right && y0 >= top && y0 < bottom) {
+                context.fill(x0, y0, x0 + 1, y0 + 1, color);
+            }
+            if (x0 == x1 && y0 == y1) break;
+            int twiceError = 2 * error;
+            if (twiceError >= dy) {
+                error += dy;
+                x0 += sx;
+            }
+            if (twiceError <= dx) {
+                error += dx;
+                y0 += sy;
+            }
+        }
+    }
 
     /** Uses an isolated directory only in the CI interaction test. */
     private static Path configDirectory() {
@@ -195,6 +391,7 @@ public final class DIPXClient implements ClientModInitializer {
                         && client.player.getHungerManager().getFoodLevel() > 6;
                 client.player.setSprinting(shouldSprint);
             }
+            updatePearlPreview(client);
         });
 
         HudRenderCallback.EVENT.register((drawContext, tickCounter) -> {
@@ -414,6 +611,15 @@ public final class DIPXClient implements ClientModInitializer {
                 drawContext.drawText(client.textRenderer, Text.literal(impactLine),
                         x, y, vanillaSmashReady && maceHeld ? 0xFF9AF5BD : 0xFFFF9B75, true);
                 y += 12;
+            }
+
+            if (enabled("Pearl Trajectory HUD")) {
+                String pearlLine = PearlTrajectoryTelemetry.summary(pearlAvailable, pearlPreview);
+                drawContext.drawText(client.textRenderer,
+                        Text.literal(client.textRenderer.trimToWidth(pearlLine, 260)),
+                        x, y, 0xFFD9B7FF, true);
+                y += 12;
+                if (pearlAvailable) drawPearlGraph(drawContext, client, pearlPreview);
             }
         });
     }

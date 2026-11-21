@@ -42,6 +42,7 @@ public final class ModuleRegistry {
         add(pending, "Attack Cooldown HUD", "Manual attack timing", ModuleCategory.COMBAT);
         add(pending, "Spear Assist HUD", "Spear hotbar slot and target range", ModuleCategory.SPEAR_PVP);
         add(pending, "Spear Charge HUD", "Live spear charge and movement speed", ModuleCategory.SPEAR_PVP);
+        add(pending, "Pearl Trajectory HUD", "Ender pearl centreline arc and collision preview", ModuleCategory.COMBAT);
 
         Set<String> names = new HashSet<>();
         for (DIPXModule module : pending) {
