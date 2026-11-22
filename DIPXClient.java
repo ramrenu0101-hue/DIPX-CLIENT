@@ -12,6 +12,9 @@ import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
 import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.screen.Screen;
+import net.minecraft.client.gui.screen.world.CreateWorldScreen;
+import net.minecraft.client.gui.screen.world.WorldCreator;
+import net.minecraft.block.Blocks;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.util.InputUtil;
@@ -33,7 +36,10 @@ import net.minecraft.registry.Registries;
 import net.minecraft.text.Text;
 import org.lwjgl.glfw.GLFW;
 import java.io.IOException;
+import java.lang.reflect.Method;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -47,6 +53,10 @@ public final class DIPXClient implements ClientModInitializer {
     private static boolean smokeOnboardingDismissed;
     private static boolean smokeOpenInjected;
     private static boolean smokeCloseInjected;
+    private static boolean smokeWorldScreenOpened;
+    private static boolean smokeWorldCreationStarted;
+    private static boolean smokePearlWorldTestsComplete;
+    private static final List<BlockPos> smokePearlTestBlocks = new ArrayList<>();
     private static PearlTrajectoryTelemetry.Preview pearlPreview = PearlTrajectoryTelemetry.unavailable();
     private static boolean pearlAvailable;
     private static int lastPearlPreviewTick = Integer.MIN_VALUE;
@@ -79,7 +89,9 @@ public final class DIPXClient implements ClientModInitializer {
             return;
         }
         lastPearlPreviewTick = client.player.age;
-        pearlAvailable = hasEnderPearl(client.player);
+        // CI-only: the loaded-world harness has no inventory dependency. Normal
+        // gameplay still requires an Ender Pearl in the player's inventory.
+        pearlAvailable = hasEnderPearl(client.player) || Boolean.getBoolean("dipx.smoke.gui");
         if (!pearlAvailable) {
             pearlPreview = PearlTrajectoryTelemetry.unavailable();
             return;
@@ -131,6 +143,202 @@ public final class DIPXClient implements ClientModInitializer {
                 pearlPreviewFailureLogged = true;
                 LOGGER.warn("Pearl trajectory preview unavailable; client remains active", previewError);
             }
+        }
+    }
+
+
+    /** Opens an isolated creative world only in the CI integration harness. */
+    private static void openSmokeWorldCreator(MinecraftClient client) {
+        if (!Boolean.getBoolean("dipx.smoke.gui") || !smokeCloseInjected
+                || smokeWorldScreenOpened || client.player != null
+                || client.currentScreen == null
+                || !client.currentScreen.getClass().getSimpleName().equals("TitleScreen")) {
+            return;
+        }
+        try {
+            for (DIPXModule module : ModuleRegistry.all()) {
+                if (module.name().equals("Pearl Trajectory HUD")) module.setEnabled(true);
+            }
+            CreateWorldScreen.show(client, () -> {});
+            smokeWorldScreenOpened = true;
+            LOGGER.info("DIPX smoke opened isolated test world creator");
+        } catch (RuntimeException error) {
+            smokePearlWorldTestsComplete = true;
+            LOGGER.error("DIPX smoke could not open test world creator", error);
+        }
+    }
+
+    /** Starts the vanilla Create World flow without depending on translated UI coordinates. */
+    private static void createSmokeWorld(MinecraftClient client) {
+        if (!Boolean.getBoolean("dipx.smoke.gui") || !smokeWorldScreenOpened
+                || smokeWorldCreationStarted || !(client.currentScreen instanceof CreateWorldScreen screen)) {
+            return;
+        }
+        try {
+            WorldCreator creator = screen.getWorldCreator();
+            creator.setWorldName("DIPX Pearl Smoke");
+            creator.setGameMode(WorldCreator.Mode.CREATIVE);
+            creator.setCheatsEnabled(true);
+            creator.setGenerateStructures(false);
+            Method createLevel = CreateWorldScreen.class.getDeclaredMethod("createLevel");
+            createLevel.setAccessible(true);
+            createLevel.invoke(screen);
+            smokeWorldCreationStarted = true;
+            LOGGER.info("DIPX smoke started isolated creative test world");
+        } catch (ReflectiveOperationException | RuntimeException error) {
+            smokePearlWorldTestsComplete = true;
+            LOGGER.error("DIPX smoke could not create test world", error);
+        }
+    }
+
+    private static void clearPearlSmokeBlocks(MinecraftClient client) {
+        if (client.world != null) {
+            for (BlockPos pos : smokePearlTestBlocks) {
+                client.world.setBlockState(pos, Blocks.AIR.getDefaultState());
+            }
+        }
+        smokePearlTestBlocks.clear();
+    }
+
+    private static void placePearlSmokeBlock(MinecraftClient client, BlockPos pos, boolean water) {
+        BlockPos immutable = pos.toImmutable();
+        if (client.world.setBlockState(immutable,
+                water ? Blocks.WATER.getDefaultState() : Blocks.STONE.getDefaultState())) {
+            smokePearlTestBlocks.add(immutable);
+        }
+    }
+
+    /** Builds the same centreline used by the HUD, but leaves collision handling to a live world query. */
+    private static PearlTrajectoryTelemetry.Preview tracePearlCenterline(
+            MinecraftClient client, PlayerEntity player, int maxTicks) {
+        EnderPearlEntity probe = new EnderPearlEntity(
+                client.world, player, Items.ENDER_PEARL.getDefaultStack());
+        probe.setVelocity(player, player.getPitch(), player.getYaw(),
+                0.0F, EnderPearlItem.POWER, 0.0F);
+        Vec3d origin = probe.getPos();
+        Vec3d velocity = probe.getVelocity();
+        return PearlTrajectoryTelemetry.trace(
+                new PearlTrajectoryTelemetry.Point(origin.x, origin.y, origin.z, 0),
+                velocity.x, velocity.y, velocity.z, 0.03, maxTicks, null,
+                point -> {
+                    boolean water = client.world.getFluidState(BlockPos.ofFloored(
+                            point.x(), point.y(), point.z())).isIn(FluidTags.WATER);
+                    return new PearlTrajectoryTelemetry.DragSample(water ? 0.8 : 0.99, water);
+                });
+    }
+
+    /** Runs the actual vanilla EnderPearlEntity tick beside the HUD's predicted points. */
+    private static double comparePearlToVanillaTick(
+            MinecraftClient client, PlayerEntity player, PearlTrajectoryTelemetry.Preview predicted, int ticks) {
+        EnderPearlEntity vanilla = new EnderPearlEntity(
+                client.world, player, Items.ENDER_PEARL.getDefaultStack());
+        vanilla.setVelocity(player, player.getPitch(), player.getYaw(),
+                0.0F, EnderPearlItem.POWER, 0.0F);
+        double maximumError = 0.0;
+        for (int tick = 1; tick <= ticks; tick++) {
+            vanilla.tick();
+            if (vanilla.isRemoved()) return Double.POSITIVE_INFINITY;
+            PearlTrajectoryTelemetry.Point expected = predicted.points().get(tick);
+            double error = vanilla.getPos().distanceTo(
+                    new Vec3d(expected.x(), expected.y(), expected.z()));
+            maximumError = Math.max(maximumError, error);
+        }
+        return maximumError;
+    }
+
+    private static void placePearlWaterPath(MinecraftClient client, PlayerEntity player, int ticks) {
+        EnderPearlEntity probe = new EnderPearlEntity(
+                client.world, player, Items.ENDER_PEARL.getDefaultStack());
+        probe.setVelocity(player, player.getPitch(), player.getYaw(),
+                0.0F, EnderPearlItem.POWER, 0.0F);
+        Vec3d position = probe.getPos();
+        Vec3d velocity = probe.getVelocity();
+        placePearlSmokeBlock(client, BlockPos.ofFloored(position), true);
+        for (int tick = 1; tick <= ticks; tick++) {
+            position = position.add(velocity);
+            placePearlSmokeBlock(client, BlockPos.ofFloored(position), true);
+            velocity = velocity.multiply(0.8).add(0.0, -0.03, 0.0);
+        }
+    }
+
+    /**
+     * Exercises the real ClientWorld collision query and compares the preview
+     * against EnderPearlEntity.tick() for level, diagonal, upward, downward,
+     * and water paths. This is smoke-only and never runs in a normal session.
+     */
+    private static void runPearlWorldSmokeTests(MinecraftClient client) {
+        if (!Boolean.getBoolean("dipx.smoke.gui") || smokePearlWorldTestsComplete
+                || !smokeWorldCreationStarted || client.player == null || client.world == null) {
+            return;
+        }
+        PlayerEntity player = client.player;
+        Vec3d savedPosition = player.getPos();
+        Vec3d savedVelocity = player.getVelocity();
+        float savedYaw = player.getYaw();
+        float savedPitch = player.getPitch();
+        String[] names = {"level", "diagonal", "upward", "downward", "water"};
+        float[] yaws = {0.0F, 45.0F, 0.0F, 0.0F, 30.0F};
+        float[] pitches = {0.0F, 0.0F, -25.0F, 25.0F, -8.0F};
+
+        try {
+            for (int scenario = 0; scenario < names.length; scenario++) {
+                clearPearlSmokeBlocks(client);
+                player.setPosition(0.5, 128.0, 0.5);
+                player.setVelocity(Vec3d.ZERO);
+                player.setYaw(yaws[scenario]);
+                player.setPitch(pitches[scenario]);
+
+                if (scenario == 4) placePearlWaterPath(client, player, 9);
+                PearlTrajectoryTelemetry.Preview predicted = tracePearlCenterline(client, player, 12);
+                if (predicted.stopReason() != PearlTrajectoryTelemetry.StopReason.RANGE_LIMIT
+                        || predicted.points().size() != 13) {
+                    throw new IllegalStateException(names[scenario] + " preview did not produce 12 clear ticks: "
+                            + predicted.stopReason() + " / " + predicted.points().size());
+                }
+
+                double maximumError = comparePearlToVanillaTick(client, player, predicted, 12);
+                if (!Double.isFinite(maximumError) || maximumError > 0.08) {
+                    throw new IllegalStateException(names[scenario]
+                            + " centreline diverged from vanilla tick by " + maximumError + " blocks");
+                }
+                if (scenario == 4 && !predicted.touchedFluid()) {
+                    throw new IllegalStateException("water scenario did not detect fluid drag");
+                }
+
+                PearlTrajectoryTelemetry.Point target = predicted.points().get(10);
+                BlockPos targetBlock = BlockPos.ofFloored(target.x(), target.y(), target.z());
+                for (int dx = -1; dx <= 1; dx++) {
+                    for (int dy = -1; dy <= 1; dy++) {
+                        for (int dz = -1; dz <= 1; dz++) {
+                            placePearlSmokeBlock(client, targetBlock.add(dx, dy, dz), false);
+                        }
+                    }
+                }
+                lastPearlPreviewTick = Integer.MIN_VALUE;
+                updatePearlPreview(client);
+                if (pearlPreview.stopReason() != PearlTrajectoryTelemetry.StopReason.BLOCK
+                        || pearlPreview.ticks() < 1 || pearlPreview.ticks() > 12) {
+                    throw new IllegalStateException(names[scenario]
+                            + " live ClientWorld collision query did not stop at the test wall: "
+                            + pearlPreview.stopReason() + " @ " + pearlPreview.ticks() + "t");
+                }
+                if (scenario == 4 && !pearlPreview.touchedFluid()) {
+                    throw new IllegalStateException("water collision preview did not retain its fluid marker");
+                }
+                LOGGER.info("DIPX pearl world smoke PASS scenario={} vanillaMaxError={} collision={} ticks={} fluid={}",
+                        names[scenario], String.format(java.util.Locale.ROOT, "%.5f", maximumError),
+                        pearlPreview.stopReason(), pearlPreview.ticks(), pearlPreview.touchedFluid());
+            }
+            LOGGER.info("DIPX pearl world smoke complete scenarios=5");
+        } catch (Throwable error) {
+            LOGGER.error("DIPX pearl world smoke FAILED", error);
+        } finally {
+            clearPearlSmokeBlocks(client);
+            player.setPosition(savedPosition.x, savedPosition.y, savedPosition.z);
+            player.setVelocity(savedVelocity);
+            player.setYaw(savedYaw);
+            player.setPitch(savedPitch);
+            smokePearlWorldTestsComplete = true;
         }
     }
 
@@ -392,6 +600,11 @@ public final class DIPXClient implements ClientModInitializer {
                 client.player.setSprinting(shouldSprint);
             }
             updatePearlPreview(client);
+            if (Boolean.getBoolean("dipx.smoke.gui")) {
+                openSmokeWorldCreator(client);
+                createSmokeWorld(client);
+                runPearlWorldSmokeTests(client);
+            }
         });
 
         HudRenderCallback.EVENT.register((drawContext, tickCounter) -> {

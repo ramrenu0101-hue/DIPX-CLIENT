@@ -120,6 +120,7 @@ jobs:
           grep -q "ShieldStatusTelemetry.shieldLine" DIPXClient.java
           grep -q "Shield Status HUD" DIPXClient.java
           grep -q "PearlTrajectoryTelemetry.trace" DIPXClient.java
+          grep -q "DIPX pearl world smoke" DIPXClient.java
           grep -q "Pearl Trajectory HUD" DIPXClient.java
           grep -q "ModuleConfigStore.load" DIPXClient.java
           grep -q "DIPXClient.saveModuleConfig()" DIPXScreen.java
@@ -134,8 +135,8 @@ jobs:
             sudo apt-get update
             sudo apt-get install -y xvfb xdotool imagemagick openbox wmctrl x11-utils mesa-utils
           fi
-      - name: Launch Minecraft and capture the real DIPX GUI
-        run: timeout --signal=TERM --kill-after=5s 240s xvfb-run -a -s "-screen 0 1280x720x24 +extension GLX" bash ci/gui-smoke.sh
+      - name: Launch Minecraft, capture the real DIPX GUI, and test Pearl trajectories in a world
+        run: timeout --signal=TERM --kill-after=5s 420s xvfb-run -a -s "-screen 0 1280x720x24 +extension GLX" bash ci/gui-smoke.sh
       - name: Upload JAR
         uses: actions/upload-artifact@v4
         with:

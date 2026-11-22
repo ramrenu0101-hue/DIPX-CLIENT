@@ -212,3 +212,31 @@ if ! grep -q "DIPX smoke injected close binding event" "$LOG" || ! grep -q "DIPX
   exit 1
 fi
 echo "GUI open/idle/close smoke test passed." | tee -a gui-smoke/smoke-status.txt
+
+# The next phase creates a real isolated singleplayer world and compares the
+# HUD centreline with the vanilla EnderPearlEntity tick/collision implementation.
+for attempt in $(seq 1 150); do
+  if grep -q "DIPX pearl world smoke complete scenarios=5" "$LOG"; then break; fi
+  if grep -q "DIPX pearl world smoke FAILED" "$LOG" \
+      || grep -q "DIPX smoke could not create test world" "$LOG"; then
+    echo "Loaded-world pearl integration test failed."
+    tail -n 180 "$LOG"
+    exit 1
+  fi
+  sleep 2
+done
+if ! grep -q "DIPX pearl world smoke complete scenarios=5" "$LOG"; then
+  echo "Timed out waiting for the loaded-world pearl integration test."
+  tail -n 180 "$LOG"
+  exit 1
+fi
+for scenario in level diagonal upward downward water; do
+  if ! grep -Fq "DIPX pearl world smoke PASS scenario=$scenario " "$LOG"; then
+    echo "Missing passing pearl world scenario: $scenario"
+    tail -n 180 "$LOG"
+    exit 1
+  fi
+done
+import -window "$WINDOW" gui-smoke/Pearl-world-smoke.png
+echo "Loaded singleplayer world: all five pearl paths matched vanilla ticks and hit the live ClientWorld test wall." \
+  | tee -a gui-smoke/smoke-status.txt
