@@ -27,6 +27,8 @@ import net.minecraft.util.hit.EntityHitResult;
 import net.minecraft.util.hit.BlockHitResult;
 import net.minecraft.util.hit.HitResult;
 import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.Box;
+import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.registry.tag.FluidTags;
 import net.minecraft.item.Items;
@@ -67,6 +69,36 @@ public final class DIPXClient implements ClientModInitializer {
         if (player.getOffHandStack().isOf(Items.ENDER_PEARL)) return true;
         for (int slot = 0; slot < player.getInventory().size(); slot++) {
             if (player.getInventory().getStack(slot).isOf(Items.ENDER_PEARL)) return true;
+        }
+        return false;
+    }
+
+    /**
+     * Mirrors vanilla water contact using the projectile's current bounding box.
+     * Sampling only the centre BlockPos misses partial/submerged edge contact.
+     */
+    private static boolean pearlTouchesWaterAt(MinecraftClient client, EnderPearlEntity probe,
+                                                PearlTrajectoryTelemetry.Point point) {
+        probe.setPosition(point.x(), point.y(), point.z());
+        Box box = probe.getBoundingBox();
+        int minX = MathHelper.floor(box.minX);
+        int maxX = MathHelper.floor(box.maxX - 1.0E-7);
+        int minY = MathHelper.floor(box.minY);
+        int maxY = MathHelper.floor(box.maxY - 1.0E-7);
+        int minZ = MathHelper.floor(box.minZ);
+        int maxZ = MathHelper.floor(box.maxZ - 1.0E-7);
+
+        for (int x = minX; x <= maxX; x++) {
+            for (int y = minY; y <= maxY; y++) {
+                for (int z = minZ; z <= maxZ; z++) {
+                    BlockPos pos = new BlockPos(x, y, z);
+                    var fluid = client.world.getFluidState(pos);
+                    if (fluid.isIn(FluidTags.WATER)
+                            && box.minY < y + fluid.getHeight(client.world, pos)) {
+                        return true;
+                    }
+                }
+            }
         }
         return false;
     }
@@ -133,8 +165,7 @@ public final class DIPXClient implements ClientModInitializer {
                                         hitPos.x, hitPos.y, hitPos.z, tick));
                     },
                     point -> {
-                        boolean water = client.world.getFluidState(BlockPos.ofFloored(
-                                point.x(), point.y(), point.z())).isIn(FluidTags.WATER);
+                        boolean water = pearlTouchesWaterAt(client, probe, point);
                         return new PearlTrajectoryTelemetry.DragSample(water ? 0.8 : 0.99, water);
                     });
         } catch (RuntimeException previewError) {
@@ -221,8 +252,7 @@ public final class DIPXClient implements ClientModInitializer {
                 new PearlTrajectoryTelemetry.Point(origin.x, origin.y, origin.z, 0),
                 velocity.x, velocity.y, velocity.z, 0.03, maxTicks, null,
                 point -> {
-                    boolean water = client.world.getFluidState(BlockPos.ofFloored(
-                            point.x(), point.y(), point.z())).isIn(FluidTags.WATER);
+                    boolean water = pearlTouchesWaterAt(client, probe, point);
                     return new PearlTrajectoryTelemetry.DragSample(water ? 0.8 : 0.99, water);
                 });
     }
@@ -275,6 +305,18 @@ public final class DIPXClient implements ClientModInitializer {
     }
 
     /**
+     * Places water beside, not under, the pearl centreline. The projectile's
+     * bounding box overlaps the water while its centre block remains dry.
+     */
+    private static void placePearlWaterEdgePath(MinecraftClient client) {
+        for (int y = 127; y <= 132; y++) {
+            for (int z = -24; z <= 24; z++) {
+                placePearlSmokeBlock(client, new BlockPos(1, y, z), true);
+            }
+        }
+    }
+
+    /**
      * Exercises the real ClientWorld collision query and compares the preview
      * against EnderPearlEntity.tick() for level, diagonal, upward, downward,
      * and water paths. This is smoke-only and never runs in a normal session.
@@ -289,19 +331,24 @@ public final class DIPXClient implements ClientModInitializer {
         Vec3d savedVelocity = player.getVelocity();
         float savedYaw = player.getYaw();
         float savedPitch = player.getPitch();
-        String[] names = {"level", "diagonal", "upward", "downward", "water"};
-        float[] yaws = {0.0F, 45.0F, 0.0F, 0.0F, 30.0F};
-        float[] pitches = {0.0F, 0.0F, -25.0F, 25.0F, -8.0F};
+        String[] names = {"level", "diagonal", "upward", "downward", "water-submerged", "water-edge"};
+        float[] yaws = {0.0F, 45.0F, 0.0F, 0.0F, 30.0F, 0.0F};
+        float[] pitches = {0.0F, 0.0F, -25.0F, 25.0F, -8.0F, 0.0F};
 
         try {
             for (int scenario = 0; scenario < names.length; scenario++) {
                 clearPearlSmokeBlocks(client);
-                player.setPosition(0.5, 128.0, 0.5);
+                player.setPosition(scenario == 5 ? 0.9 : 0.5,
+                        scenario == 5 ? 128.98 : 128.0, 0.5);
                 player.setVelocity(Vec3d.ZERO);
                 player.setYaw(yaws[scenario]);
                 player.setPitch(pitches[scenario]);
 
-                if (scenario == 4) placePearlWaterPath(client, player, 9);
+                if (scenario == 4) {
+                    placePearlWaterPath(client, player, 9);
+                } else if (scenario == 5) {
+                    placePearlWaterEdgePath(client);
+                }
                 PearlTrajectoryTelemetry.Preview predicted = tracePearlCenterline(client, player, 12);
                 if (predicted.stopReason() != PearlTrajectoryTelemetry.StopReason.RANGE_LIMIT
                         || predicted.points().size() != 13) {
@@ -309,14 +356,23 @@ public final class DIPXClient implements ClientModInitializer {
                             + predicted.stopReason() + " / " + predicted.points().size());
                 }
 
+                if (scenario == 5) {
+                    for (PearlTrajectoryTelemetry.Point point : predicted.points()) {
+                        BlockPos centerBlock = BlockPos.ofFloored(point.x(), point.y(), point.z());
+                        if (client.world.getBlockState(centerBlock).isOf(Blocks.WATER)) {
+                            throw new IllegalStateException("water-edge fixture flooded the pearl centre block");
+                        }
+                    }
+                }
+
                 double maximumError = comparePearlToVanillaTick(
-                        client, player, predicted, 12, scenario == 4);
+                        client, player, predicted, 12, scenario >= 4);
                 if (!Double.isFinite(maximumError) || maximumError > 0.08) {
                     throw new IllegalStateException(names[scenario]
                             + " centreline diverged from vanilla tick by " + maximumError + " blocks");
                 }
-                if (scenario == 4 && !predicted.touchedFluid()) {
-                    throw new IllegalStateException("water scenario did not detect fluid drag");
+                if (scenario >= 4 && !predicted.touchedFluid()) {
+                    throw new IllegalStateException(names[scenario] + " scenario did not detect vanilla water drag");
                 }
 
                 PearlTrajectoryTelemetry.Point target = predicted.points().get(10);
@@ -336,14 +392,14 @@ public final class DIPXClient implements ClientModInitializer {
                             + " live ClientWorld collision query did not stop at the test wall: "
                             + pearlPreview.stopReason() + " @ " + pearlPreview.ticks() + "t");
                 }
-                if (scenario == 4 && !pearlPreview.touchedFluid()) {
-                    throw new IllegalStateException("water collision preview did not retain its fluid marker");
+                if (scenario >= 4 && !pearlPreview.touchedFluid()) {
+                    throw new IllegalStateException(names[scenario] + " collision preview did not retain its fluid marker");
                 }
                 LOGGER.info("DIPX pearl world smoke PASS scenario={} vanillaMaxError={} collision={} ticks={} fluid={}",
                         names[scenario], String.format(java.util.Locale.ROOT, "%.5f", maximumError),
                         pearlPreview.stopReason(), pearlPreview.ticks(), pearlPreview.touchedFluid());
             }
-            LOGGER.info("DIPX pearl world smoke complete scenarios=5");
+            LOGGER.info("DIPX pearl world smoke complete scenarios=6");
         } catch (Throwable error) {
             LOGGER.error("DIPX pearl world smoke FAILED", error);
         } finally {
