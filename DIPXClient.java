@@ -229,7 +229,8 @@ public final class DIPXClient implements ClientModInitializer {
 
     /** Runs the actual vanilla EnderPearlEntity tick beside the HUD's predicted points. */
     private static double comparePearlToVanillaTick(
-            MinecraftClient client, PlayerEntity player, PearlTrajectoryTelemetry.Preview predicted, int ticks) {
+            MinecraftClient client, PlayerEntity player, PearlTrajectoryTelemetry.Preview predicted,
+            int ticks, boolean expectWater) {
         EnderPearlEntity vanilla = new EnderPearlEntity(
                 client.world, player, Items.ENDER_PEARL.getDefaultStack());
         vanilla.setVelocity(player, player.getPitch(), player.getYaw(),
@@ -237,13 +238,25 @@ public final class DIPXClient implements ClientModInitializer {
         double maximumError = 0.0;
         for (int tick = 1; tick <= ticks; tick++) {
             vanilla.tick();
-            if (vanilla.isRemoved()) return Double.POSITIVE_INFINITY;
+            if (vanilla.isRemoved() || (expectWater && !vanilla.isTouchingWater())) {
+                return Double.POSITIVE_INFINITY;
+            }
             PearlTrajectoryTelemetry.Point expected = predicted.points().get(tick);
             double error = new Vec3d(vanilla.getX(), vanilla.getY(), vanilla.getZ()).distanceTo(
                     new Vec3d(expected.x(), expected.y(), expected.z()));
             maximumError = Math.max(maximumError, error);
         }
         return maximumError;
+    }
+
+    private static void placePearlWaterCube(MinecraftClient client, BlockPos center) {
+        for (int dx = -1; dx <= 1; dx++) {
+            for (int dy = -1; dy <= 1; dy++) {
+                for (int dz = -1; dz <= 1; dz++) {
+                    placePearlSmokeBlock(client, center.add(dx, dy, dz), true);
+                }
+            }
+        }
     }
 
     private static void placePearlWaterPath(MinecraftClient client, PlayerEntity player, int ticks) {
@@ -253,11 +266,11 @@ public final class DIPXClient implements ClientModInitializer {
                 0.0F, EnderPearlItem.POWER, 0.0F);
         Vec3d position = new Vec3d(probe.getX(), probe.getY(), probe.getZ());
         Vec3d velocity = probe.getVelocity();
-        placePearlSmokeBlock(client, BlockPos.ofFloored(position), true);
+        placePearlWaterCube(client, BlockPos.ofFloored(position));
         for (int tick = 1; tick <= ticks; tick++) {
             velocity = velocity.add(0.0, -0.03, 0.0).multiply(0.8);
             position = position.add(velocity);
-            placePearlSmokeBlock(client, BlockPos.ofFloored(position), true);
+            placePearlWaterCube(client, BlockPos.ofFloored(position));
         }
     }
 
@@ -296,7 +309,8 @@ public final class DIPXClient implements ClientModInitializer {
                             + predicted.stopReason() + " / " + predicted.points().size());
                 }
 
-                double maximumError = comparePearlToVanillaTick(client, player, predicted, 12);
+                double maximumError = comparePearlToVanillaTick(
+                        client, player, predicted, 12, scenario == 4);
                 if (!Double.isFinite(maximumError) || maximumError > 0.08) {
                     throw new IllegalStateException(names[scenario]
                             + " centreline diverged from vanilla tick by " + maximumError + " blocks");
