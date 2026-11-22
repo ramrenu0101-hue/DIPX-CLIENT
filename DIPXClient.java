@@ -215,7 +215,7 @@ public final class DIPXClient implements ClientModInitializer {
                 client.world, player, Items.ENDER_PEARL.getDefaultStack());
         probe.setVelocity(player, player.getPitch(), player.getYaw(),
                 0.0F, EnderPearlItem.POWER, 0.0F);
-        Vec3d origin = probe.getPos();
+        Vec3d origin = new Vec3d(probe.getX(), probe.getY(), probe.getZ());
         Vec3d velocity = probe.getVelocity();
         return PearlTrajectoryTelemetry.trace(
                 new PearlTrajectoryTelemetry.Point(origin.x, origin.y, origin.z, 0),
@@ -239,7 +239,7 @@ public final class DIPXClient implements ClientModInitializer {
             vanilla.tick();
             if (vanilla.isRemoved()) return Double.POSITIVE_INFINITY;
             PearlTrajectoryTelemetry.Point expected = predicted.points().get(tick);
-            double error = vanilla.getPos().distanceTo(
+            double error = new Vec3d(vanilla.getX(), vanilla.getY(), vanilla.getZ()).distanceTo(
                     new Vec3d(expected.x(), expected.y(), expected.z()));
             maximumError = Math.max(maximumError, error);
         }
@@ -251,7 +251,7 @@ public final class DIPXClient implements ClientModInitializer {
                 client.world, player, Items.ENDER_PEARL.getDefaultStack());
         probe.setVelocity(player, player.getPitch(), player.getYaw(),
                 0.0F, EnderPearlItem.POWER, 0.0F);
-        Vec3d position = probe.getPos();
+        Vec3d position = new Vec3d(probe.getX(), probe.getY(), probe.getZ());
         Vec3d velocity = probe.getVelocity();
         placePearlSmokeBlock(client, BlockPos.ofFloored(position), true);
         for (int tick = 1; tick <= ticks; tick++) {
@@ -272,7 +272,7 @@ public final class DIPXClient implements ClientModInitializer {
             return;
         }
         PlayerEntity player = client.player;
-        Vec3d savedPosition = player.getPos();
+        Vec3d savedPosition = new Vec3d(player.getX(), player.getY(), player.getZ());
         Vec3d savedVelocity = player.getVelocity();
         float savedYaw = player.getYaw();
         float savedPitch = player.getPitch();
