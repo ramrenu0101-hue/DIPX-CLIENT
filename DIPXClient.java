@@ -255,9 +255,9 @@ public final class DIPXClient implements ClientModInitializer {
         Vec3d velocity = probe.getVelocity();
         placePearlSmokeBlock(client, BlockPos.ofFloored(position), true);
         for (int tick = 1; tick <= ticks; tick++) {
+            velocity = velocity.add(0.0, -0.03, 0.0).multiply(0.8);
             position = position.add(velocity);
             placePearlSmokeBlock(client, BlockPos.ofFloored(position), true);
-            velocity = velocity.multiply(0.8).add(0.0, -0.03, 0.0);
         }
     }
 

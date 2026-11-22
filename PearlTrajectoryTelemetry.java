@@ -46,8 +46,9 @@ public final class PearlTrajectoryTelemetry {
     }
 
     /**
-     * Steps one projectile tick at a time: move, apply medium drag, then apply
-     * gravity. Collision checks happen on each swept segment before advancing.
+     * Matches throwable projectiles in Minecraft 1.21.2+: sample the current
+     * medium, apply gravity, apply drag, then sweep/move along the new velocity.
+     * Collision checks use that same per-tick segment.
      */
     public static Preview trace(Point origin, double velocityX, double velocityY, double velocityZ,
                                 double gravity, int maxTicks,
@@ -65,6 +66,17 @@ public final class PearlTrajectoryTelemetry {
         boolean touchedFluid = false;
 
         for (int tick = 1; tick <= maxTicks; tick++) {
+            DragSample drag = dragProvider == null
+                    ? new DragSample(0.99, false) : dragProvider.at(position);
+            if (drag == null || !Double.isFinite(drag.factor())
+                    || drag.factor() < 0.0 || drag.factor() > 1.0) {
+                return unavailable();
+            }
+            touchedFluid |= drag.fluid();
+
+            velocityY = (velocityY - gravity) * drag.factor();
+            velocityX *= drag.factor();
+            velocityZ *= drag.factor();
             Point next = new Point(position.x() + velocityX,
                     position.y() + velocityY, position.z() + velocityZ, tick);
             if (!next.isFinite()) return unavailable();
@@ -82,16 +94,6 @@ public final class PearlTrajectoryTelemetry {
             }
 
             points.add(next);
-            DragSample drag = dragProvider == null
-                    ? new DragSample(0.99, false) : dragProvider.at(next);
-            if (drag == null || !Double.isFinite(drag.factor())
-                    || drag.factor() < 0.0 || drag.factor() > 1.0) {
-                return unavailable();
-            }
-            touchedFluid |= drag.fluid();
-            velocityX *= drag.factor();
-            velocityY = velocityY * drag.factor() - gravity;
-            velocityZ *= drag.factor();
             position = next;
         }
 
