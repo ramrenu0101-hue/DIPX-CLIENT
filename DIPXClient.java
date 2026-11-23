@@ -334,6 +334,8 @@ public final class DIPXClient implements ClientModInitializer {
         String[] names = {"level", "diagonal", "upward", "downward", "water-submerged", "water-edge"};
         float[] yaws = {0.0F, 45.0F, 0.0F, 0.0F, 30.0F, 0.0F};
         float[] pitches = {0.0F, 0.0F, -25.0F, 25.0F, -8.0F, 0.0F};
+        // Keep the water fixture, prediction and vanilla comparison on the same horizon.
+        final int smokeTicks = 12;
 
         try {
             for (int scenario = 0; scenario < names.length; scenario++) {
@@ -345,14 +347,14 @@ public final class DIPXClient implements ClientModInitializer {
                 player.setPitch(pitches[scenario]);
 
                 if (scenario == 4) {
-                    placePearlWaterPath(client, player, 9);
+                    placePearlWaterPath(client, player, smokeTicks);
                 } else if (scenario == 5) {
                     placePearlWaterEdgePath(client);
                 }
-                PearlTrajectoryTelemetry.Preview predicted = tracePearlCenterline(client, player, 12);
+                PearlTrajectoryTelemetry.Preview predicted = tracePearlCenterline(client, player, smokeTicks);
                 if (predicted.stopReason() != PearlTrajectoryTelemetry.StopReason.RANGE_LIMIT
-                        || predicted.points().size() != 13) {
-                    throw new IllegalStateException(names[scenario] + " preview did not produce 12 clear ticks: "
+                        || predicted.points().size() != smokeTicks + 1) {
+                    throw new IllegalStateException(names[scenario] + " preview did not produce " + smokeTicks + " clear ticks: "
                             + predicted.stopReason() + " / " + predicted.points().size());
                 }
 
@@ -366,7 +368,7 @@ public final class DIPXClient implements ClientModInitializer {
                 }
 
                 double maximumError = comparePearlToVanillaTick(
-                        client, player, predicted, 12, scenario >= 4);
+                        client, player, predicted, smokeTicks, scenario >= 4);
                 if (!Double.isFinite(maximumError) || maximumError > 0.08) {
                     throw new IllegalStateException(names[scenario]
                             + " centreline diverged from vanilla tick by " + maximumError + " blocks");
