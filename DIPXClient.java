@@ -233,10 +233,15 @@ public final class DIPXClient implements ClientModInitializer {
 
     private static void placePearlSmokeBlock(MinecraftClient client, BlockPos pos, boolean water) {
         BlockPos immutable = pos.toImmutable();
-        if (client.world.setBlockState(immutable,
-                water ? Blocks.WATER.getDefaultState() : Blocks.STONE.getDefaultState())) {
-            smokePearlTestBlocks.add(immutable);
+        var fixtureState = water ? Blocks.WATER.getDefaultState() : Blocks.STONE.getDefaultState();
+        // A client world silently rejects writes to unloaded chunks. Treat that as
+        // a fixture error instead of letting a missing wall look like a raycast bug.
+        if (!client.world.getBlockState(immutable).equals(fixtureState)
+                && !client.world.setBlockState(immutable, fixtureState)) {
+            throw new IllegalStateException("Pearl smoke fixture block was not applied at " + immutable
+                    + " (chunk may not be loaded)");
         }
+        smokePearlTestBlocks.add(immutable);
     }
 
     /** Builds the same centreline used by the HUD, but leaves collision handling to a live world query. */
@@ -308,10 +313,13 @@ public final class DIPXClient implements ClientModInitializer {
      * Places water beside, not under, the pearl centreline. The projectile's
      * bounding box overlaps the water while its centre block remains dry.
      */
-    private static void placePearlWaterEdgePath(MinecraftClient client) {
+    private static void placePearlWaterEdgePath(MinecraftClient client, BlockPos anchor) {
+        // Keep the test water inside the already-loaded spawn chunks. The pearl
+        // centre stays in anchor.x while its 0.25-wide box overlaps anchor.x + 1.
+        int waterX = anchor.getX() + 1;
         for (int y = 127; y <= 132; y++) {
-            for (int z = -24; z <= 24; z++) {
-                placePearlSmokeBlock(client, new BlockPos(1, y, z), true);
+            for (int z = anchor.getZ() - 1; z <= anchor.getZ() + 24; z++) {
+                placePearlSmokeBlock(client, new BlockPos(waterX, y, z), true);
             }
         }
     }
@@ -336,12 +344,16 @@ public final class DIPXClient implements ClientModInitializer {
         float[] pitches = {0.0F, 0.0F, -25.0F, 25.0F, -8.0F, 0.0F};
         // Keep the water fixture, prediction and vanilla comparison on the same horizon.
         final int smokeTicks = 12;
+        // The integrated world spawn chunks are loaded around the real player.
+        // Use that location as the fixture origin instead of teleporting to
+        // (0, 128, 0), which may be several unloaded chunks away.
+        BlockPos anchor = BlockPos.ofFloored(savedPosition.x, 128.0, savedPosition.z);
 
         try {
             for (int scenario = 0; scenario < names.length; scenario++) {
                 clearPearlSmokeBlocks(client);
-                player.setPosition(scenario == 5 ? 0.9 : 0.5,
-                        scenario == 5 ? 128.98 : 128.0, 0.5);
+                player.setPosition(scenario == 5 ? anchor.getX() + 0.9 : anchor.getX() + 0.5,
+                        scenario == 5 ? 128.98 : 128.0, anchor.getZ() + 0.5);
                 player.setVelocity(Vec3d.ZERO);
                 player.setYaw(yaws[scenario]);
                 player.setPitch(pitches[scenario]);
@@ -349,7 +361,7 @@ public final class DIPXClient implements ClientModInitializer {
                 if (scenario == 4) {
                     placePearlWaterPath(client, player, smokeTicks);
                 } else if (scenario == 5) {
-                    placePearlWaterEdgePath(client);
+                    placePearlWaterEdgePath(client, anchor);
                 }
                 PearlTrajectoryTelemetry.Preview predicted = tracePearlCenterline(client, player, smokeTicks);
                 if (predicted.stopReason() != PearlTrajectoryTelemetry.StopReason.RANGE_LIMIT
@@ -386,6 +398,12 @@ public final class DIPXClient implements ClientModInitializer {
                         }
                     }
                 }
+                if (smokePearlTestBlocks.size() < 27) {
+                    throw new IllegalStateException(names[scenario] + " collision wall fixture was incomplete: "
+                            + smokePearlTestBlocks.size() + "/27 blocks applied");
+                }
+                LOGGER.info("DIPX pearl smoke collision wall placed scenario={} blocks={} target={}",
+                        names[scenario], smokePearlTestBlocks.size(), targetBlock);
                 lastPearlPreviewTick = Integer.MIN_VALUE;
                 updatePearlPreview(client);
                 if (pearlPreview.stopReason() != PearlTrajectoryTelemetry.StopReason.BLOCK
