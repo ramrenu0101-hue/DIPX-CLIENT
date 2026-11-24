@@ -313,7 +313,7 @@ public final class DIPXClient implements ClientModInitializer {
         // Keep the test water inside the already-loaded spawn chunks. The pearl
         // centre stays in anchor.x while its 0.25-wide box overlaps anchor.x + 1.
         int waterX = anchor.getX() + 1;
-        for (int y = 127; y <= 132; y++) {
+        for (int y = anchor.getY() - 1; y <= anchor.getY() + 4; y++) {
             for (int z = anchor.getZ() - 1; z <= anchor.getZ() + 24; z++) {
                 placePearlSmokeBlock(client, new BlockPos(waterX, y, z), true);
             }
@@ -343,13 +343,16 @@ public final class DIPXClient implements ClientModInitializer {
         // The integrated world spawn chunks are loaded around the real player.
         // Use that location as the fixture origin instead of teleporting to
         // (0, 128, 0), which may be several unloaded chunks away.
-        BlockPos anchor = BlockPos.ofFloored(savedPosition.x, 128.0, savedPosition.z);
+        // Stay in the vertical chunk section already streamed around the player.
+        // The old fixed y=128 could be outside the client-loaded section on some seeds.
+        int testY = MathHelper.floor(savedPosition.y) + 8;
+        BlockPos anchor = BlockPos.ofFloored(savedPosition.x, testY, savedPosition.z);
 
         try {
             for (int scenario = 0; scenario < names.length; scenario++) {
                 clearPearlSmokeBlocks(client);
                 player.setPosition(scenario == 5 ? anchor.getX() + 0.9 : anchor.getX() + 0.5,
-                        scenario == 5 ? 128.98 : 128.0, anchor.getZ() + 0.5);
+                        scenario == 5 ? anchor.getY() + 0.98 : anchor.getY(), anchor.getZ() + 0.5);
                 player.setVelocity(Vec3d.ZERO);
                 player.setYaw(yaws[scenario]);
                 player.setPitch(pitches[scenario]);
