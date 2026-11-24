@@ -277,9 +277,15 @@ public final class DIPXClient implements ClientModInitializer {
                 return Double.POSITIVE_INFINITY;
             }
             PearlTrajectoryTelemetry.Point expected = predicted.points().get(tick);
-            double error = new Vec3d(vanilla.getX(), vanilla.getY(), vanilla.getZ()).distanceTo(
-                    new Vec3d(expected.x(), expected.y(), expected.z()));
+            Vec3d actualPosition = new Vec3d(vanilla.getX(), vanilla.getY(), vanilla.getZ());
+            double error = actualPosition.distanceTo(new Vec3d(expected.x(), expected.y(), expected.z()));
             maximumError = Math.max(maximumError, error);
+            if (expectWater) {
+                LOGGER.info("DIPX pearl water compare tick={} expected=({}, {}, {}) actual={} velocity={} error={} waterHeight={} touching={} submerged={}",
+                        tick, expected.x(), expected.y(), expected.z(), actualPosition, vanilla.getVelocity(),
+                        String.format(java.util.Locale.ROOT, "%.5f", error),
+                        vanilla.getFluidHeight(FluidTags.WATER), vanilla.isTouchingWater(), vanilla.isSubmergedInWater());
+            }
         }
         return maximumError;
     }
