@@ -65,7 +65,7 @@ public final class DIPXClient implements ClientModInitializer {
     private static boolean pearlPreviewFailureLogged;
     private static final Logger LOGGER = LoggerFactory.getLogger("DIPX/Client");
     private static final double PEARL_AIR_DRAG = 0.99;
-    private static final double PEARL_SUBMERGED_DRAG = 0.8;
+    private static final double PEARL_WATER_DRAG = 0.8;
 
     /** Exposes vanilla's protected water-state refresh without spawning the probe. */
     private static final class PearlPreviewProbe extends EnderPearlEntity {
@@ -95,11 +95,9 @@ public final class DIPXClient implements ClientModInitializer {
             PearlPreviewProbe probe, PearlTrajectoryTelemetry.Point point) {
         probe.setPosition(point.x(), point.y(), point.z());
         probe.refreshFluidState();
-        double waterHeight = probe.getFluidHeight(FluidTags.WATER);
-        boolean water = probe.isTouchingWater() || waterHeight > 0.0;
-        boolean submerged = water && waterHeight > probe.getSwimHeight();
+        boolean water = probe.isTouchingWater();
         return new PearlTrajectoryTelemetry.DragSample(
-                submerged ? PEARL_SUBMERGED_DRAG : PEARL_AIR_DRAG, water);
+                water ? PEARL_WATER_DRAG : PEARL_AIR_DRAG, water);
     }
 
     /**
@@ -162,7 +160,9 @@ public final class DIPXClient implements ClientModInitializer {
                                 new PearlTrajectoryTelemetry.Point(
                                         hitPos.x, hitPos.y, hitPos.z, tick));
                     },
-                    point -> pearlDragAt(probe, point));
+                    point -> point.tick() == 0
+                            ? new PearlTrajectoryTelemetry.DragSample(PEARL_AIR_DRAG, false)
+                            : pearlDragAt(probe, point));
         } catch (RuntimeException previewError) {
             pearlPreview = PearlTrajectoryTelemetry.unavailable();
             if (!pearlPreviewFailureLogged) {
@@ -250,7 +250,9 @@ public final class DIPXClient implements ClientModInitializer {
         return PearlTrajectoryTelemetry.trace(
                 new PearlTrajectoryTelemetry.Point(origin.x, origin.y, origin.z, 0),
                 velocity.x, velocity.y, velocity.z, 0.03, maxTicks, null,
-                point -> pearlDragAt(probe, point));
+                point -> point.tick() == 0
+                        ? new PearlTrajectoryTelemetry.DragSample(PEARL_AIR_DRAG, false)
+                        : pearlDragAt(probe, point));
     }
 
     /** Runs the actual vanilla EnderPearlEntity tick beside the HUD's predicted points. */
@@ -293,8 +295,10 @@ public final class DIPXClient implements ClientModInitializer {
         Vec3d velocity = probe.getVelocity();
         placePearlWaterCube(client, BlockPos.ofFloored(position));
         for (int tick = 1; tick <= ticks; tick++) {
-            PearlTrajectoryTelemetry.DragSample drag = pearlDragAt(probe,
-                    new PearlTrajectoryTelemetry.Point(position.x, position.y, position.z, tick - 1));
+            PearlTrajectoryTelemetry.DragSample drag = tick == 1
+                    ? new PearlTrajectoryTelemetry.DragSample(PEARL_AIR_DRAG, false)
+                    : pearlDragAt(probe,
+                            new PearlTrajectoryTelemetry.Point(position.x, position.y, position.z, tick - 1));
             velocity = velocity.add(0.0, -0.03, 0.0).multiply(drag.factor());
             position = position.add(velocity);
             placePearlWaterCube(client, BlockPos.ofFloored(position));
