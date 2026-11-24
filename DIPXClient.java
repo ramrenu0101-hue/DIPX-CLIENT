@@ -64,6 +64,8 @@ public final class DIPXClient implements ClientModInitializer {
     private static int lastPearlPreviewTick = Integer.MIN_VALUE;
     private static boolean pearlPreviewFailureLogged;
     private static final Logger LOGGER = LoggerFactory.getLogger("DIPX/Client");
+    // Vanilla 1.21.11 ThrownEntity keeps 0.99 drag in water as well as air.
+    private static final double PEARL_DRAG = 0.99;
 
     private static boolean hasEnderPearl(PlayerEntity player) {
         if (player.getOffHandStack().isOf(Items.ENDER_PEARL)) return true;
@@ -166,7 +168,7 @@ public final class DIPXClient implements ClientModInitializer {
                     },
                     point -> {
                         boolean water = pearlTouchesWaterAt(client, probe, point);
-                        return new PearlTrajectoryTelemetry.DragSample(water ? 0.8 : 0.99, water);
+                        return new PearlTrajectoryTelemetry.DragSample(PEARL_DRAG, water);
                     });
         } catch (RuntimeException previewError) {
             pearlPreview = PearlTrajectoryTelemetry.unavailable();
@@ -258,7 +260,7 @@ public final class DIPXClient implements ClientModInitializer {
                 velocity.x, velocity.y, velocity.z, 0.03, maxTicks, null,
                 point -> {
                     boolean water = pearlTouchesWaterAt(client, probe, point);
-                    return new PearlTrajectoryTelemetry.DragSample(water ? 0.8 : 0.99, water);
+                    return new PearlTrajectoryTelemetry.DragSample(PEARL_DRAG, water);
                 });
     }
 
@@ -277,15 +279,9 @@ public final class DIPXClient implements ClientModInitializer {
                 return Double.POSITIVE_INFINITY;
             }
             PearlTrajectoryTelemetry.Point expected = predicted.points().get(tick);
-            Vec3d actualPosition = new Vec3d(vanilla.getX(), vanilla.getY(), vanilla.getZ());
-            double error = actualPosition.distanceTo(new Vec3d(expected.x(), expected.y(), expected.z()));
+            double error = new Vec3d(vanilla.getX(), vanilla.getY(), vanilla.getZ()).distanceTo(
+                    new Vec3d(expected.x(), expected.y(), expected.z()));
             maximumError = Math.max(maximumError, error);
-            if (expectWater) {
-                LOGGER.info("DIPX pearl water compare tick={} expected=({}, {}, {}) actual={} velocity={} error={} waterHeight={} touching={} submerged={}",
-                        tick, expected.x(), expected.y(), expected.z(), actualPosition, vanilla.getVelocity(),
-                        String.format(java.util.Locale.ROOT, "%.5f", error),
-                        vanilla.getFluidHeight(FluidTags.WATER), vanilla.isTouchingWater(), vanilla.isSubmergedInWater());
-            }
         }
         return maximumError;
     }
@@ -309,7 +305,7 @@ public final class DIPXClient implements ClientModInitializer {
         Vec3d velocity = probe.getVelocity();
         placePearlWaterCube(client, BlockPos.ofFloored(position));
         for (int tick = 1; tick <= ticks; tick++) {
-            velocity = velocity.add(0.0, -0.03, 0.0).multiply(0.8);
+            velocity = velocity.add(0.0, -0.03, 0.0).multiply(PEARL_DRAG);
             position = position.add(velocity);
             placePearlWaterCube(client, BlockPos.ofFloored(position));
         }
