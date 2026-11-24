@@ -64,8 +64,19 @@ public final class DIPXClient implements ClientModInitializer {
     private static int lastPearlPreviewTick = Integer.MIN_VALUE;
     private static boolean pearlPreviewFailureLogged;
     private static final Logger LOGGER = LoggerFactory.getLogger("DIPX/Client");
-    // Vanilla 1.21.11 ThrownEntity keeps 0.99 drag in water as well as air.
-    private static final double PEARL_DRAG = 0.99;
+    private static final double PEARL_AIR_DRAG = 0.99;
+    private static final double PEARL_SUBMERGED_DRAG = 0.8;
+
+    /** Exposes vanilla's protected water-state refresh without spawning the probe. */
+    private static final class PearlPreviewProbe extends EnderPearlEntity {
+        private PearlPreviewProbe(net.minecraft.world.World world, PlayerEntity owner) {
+            super(world, owner, Items.ENDER_PEARL.getDefaultStack());
+        }
+
+        private void refreshFluidState() {
+            updateWaterState();
+        }
+    }
 
     private static boolean hasEnderPearl(PlayerEntity player) {
         if (player.getOffHandStack().isOf(Items.ENDER_PEARL)) return true;
@@ -76,33 +87,19 @@ public final class DIPXClient implements ClientModInitializer {
     }
 
     /**
-     * Mirrors vanilla water contact using the projectile's current bounding box.
-     * Sampling only the centre BlockPos misses partial/submerged edge contact.
+     * Samples vanilla's refreshed fluid height over the projectile bounding box.
+     * EnderPearlEntity uses submerged drag only after fluid height crosses its
+     * swim-height threshold; partial contact retains the normal projectile drag.
      */
-    private static boolean pearlTouchesWaterAt(MinecraftClient client, EnderPearlEntity probe,
-                                                PearlTrajectoryTelemetry.Point point) {
+    private static PearlTrajectoryTelemetry.DragSample pearlDragAt(
+            PearlPreviewProbe probe, PearlTrajectoryTelemetry.Point point) {
         probe.setPosition(point.x(), point.y(), point.z());
-        Box box = probe.getBoundingBox();
-        int minX = MathHelper.floor(box.minX);
-        int maxX = MathHelper.floor(box.maxX - 1.0E-7);
-        int minY = MathHelper.floor(box.minY);
-        int maxY = MathHelper.floor(box.maxY - 1.0E-7);
-        int minZ = MathHelper.floor(box.minZ);
-        int maxZ = MathHelper.floor(box.maxZ - 1.0E-7);
-
-        for (int x = minX; x <= maxX; x++) {
-            for (int y = minY; y <= maxY; y++) {
-                for (int z = minZ; z <= maxZ; z++) {
-                    BlockPos pos = new BlockPos(x, y, z);
-                    var fluid = client.world.getFluidState(pos);
-                    if (fluid.isIn(FluidTags.WATER)
-                            && box.minY < y + fluid.getHeight(client.world, pos)) {
-                        return true;
-                    }
-                }
-            }
-        }
-        return false;
+        probe.refreshFluidState();
+        double waterHeight = probe.getFluidHeight(FluidTags.WATER);
+        boolean water = probe.isTouchingWater() || waterHeight > 0.0;
+        boolean submerged = water && waterHeight > probe.getSwimHeight();
+        return new PearlTrajectoryTelemetry.DragSample(
+                submerged ? PEARL_SUBMERGED_DRAG : PEARL_AIR_DRAG, water);
     }
 
     /**
@@ -133,8 +130,7 @@ public final class DIPXClient implements ClientModInitializer {
 
         try {
             PlayerEntity player = client.player;
-            EnderPearlEntity probe = new EnderPearlEntity(
-                    client.world, player, Items.ENDER_PEARL.getDefaultStack());
+            PearlPreviewProbe probe = new PearlPreviewProbe(client.world, player);
             // Zero divergence draws the vanilla aim centreline. Real throws
             // include a tiny random spread, so the displayed path is an estimate.
             probe.setVelocity(player, player.getPitch(), player.getYaw(),
@@ -166,10 +162,7 @@ public final class DIPXClient implements ClientModInitializer {
                                 new PearlTrajectoryTelemetry.Point(
                                         hitPos.x, hitPos.y, hitPos.z, tick));
                     },
-                    point -> {
-                        boolean water = pearlTouchesWaterAt(client, probe, point);
-                        return new PearlTrajectoryTelemetry.DragSample(PEARL_DRAG, water);
-                    });
+                    point -> pearlDragAt(probe, point));
         } catch (RuntimeException previewError) {
             pearlPreview = PearlTrajectoryTelemetry.unavailable();
             if (!pearlPreviewFailureLogged) {
@@ -249,8 +242,7 @@ public final class DIPXClient implements ClientModInitializer {
     /** Builds the same centreline used by the HUD, but leaves collision handling to a live world query. */
     private static PearlTrajectoryTelemetry.Preview tracePearlCenterline(
             MinecraftClient client, PlayerEntity player, int maxTicks) {
-        EnderPearlEntity probe = new EnderPearlEntity(
-                client.world, player, Items.ENDER_PEARL.getDefaultStack());
+        PearlPreviewProbe probe = new PearlPreviewProbe(client.world, player);
         probe.setVelocity(player, player.getPitch(), player.getYaw(),
                 0.0F, EnderPearlItem.POWER, 0.0F);
         Vec3d origin = new Vec3d(probe.getX(), probe.getY(), probe.getZ());
@@ -258,10 +250,7 @@ public final class DIPXClient implements ClientModInitializer {
         return PearlTrajectoryTelemetry.trace(
                 new PearlTrajectoryTelemetry.Point(origin.x, origin.y, origin.z, 0),
                 velocity.x, velocity.y, velocity.z, 0.03, maxTicks, null,
-                point -> {
-                    boolean water = pearlTouchesWaterAt(client, probe, point);
-                    return new PearlTrajectoryTelemetry.DragSample(PEARL_DRAG, water);
-                });
+                point -> pearlDragAt(probe, point));
     }
 
     /** Runs the actual vanilla EnderPearlEntity tick beside the HUD's predicted points. */
@@ -297,15 +286,16 @@ public final class DIPXClient implements ClientModInitializer {
     }
 
     private static void placePearlWaterPath(MinecraftClient client, PlayerEntity player, int ticks) {
-        EnderPearlEntity probe = new EnderPearlEntity(
-                client.world, player, Items.ENDER_PEARL.getDefaultStack());
+        PearlPreviewProbe probe = new PearlPreviewProbe(client.world, player);
         probe.setVelocity(player, player.getPitch(), player.getYaw(),
                 0.0F, EnderPearlItem.POWER, 0.0F);
         Vec3d position = new Vec3d(probe.getX(), probe.getY(), probe.getZ());
         Vec3d velocity = probe.getVelocity();
         placePearlWaterCube(client, BlockPos.ofFloored(position));
         for (int tick = 1; tick <= ticks; tick++) {
-            velocity = velocity.add(0.0, -0.03, 0.0).multiply(PEARL_DRAG);
+            PearlTrajectoryTelemetry.DragSample drag = pearlDragAt(probe,
+                    new PearlTrajectoryTelemetry.Point(position.x, position.y, position.z, tick - 1));
+            velocity = velocity.add(0.0, -0.03, 0.0).multiply(drag.factor());
             position = position.add(velocity);
             placePearlWaterCube(client, BlockPos.ofFloored(position));
         }
