@@ -240,12 +240,14 @@ public final class DIPXClient implements ClientModInitializer {
     }
 
     /**
-     * The smoke world's natural terrain is seed-dependent. Clear only non-water
-     * blocks along the predicted path so vanilla tick comparison tests projectile
-     * physics rather than an accidental hillside collision. Water fixtures remain.
+     * Clears a three-block corridor around a simulated path. Dry scenarios clear
+     * water as well as terrain so a random lake in the generated spawn chunks
+     * cannot silently change the vanilla projectile's drag. Water scenarios first
+     * clear this corridor, then lay their own controlled fluid fixture.
      */
     private static void clearPearlSmokePath(MinecraftClient client,
-                                             PearlTrajectoryTelemetry.Preview preview) {
+                                             PearlTrajectoryTelemetry.Preview preview,
+                                             boolean preserveWater) {
         for (PearlTrajectoryTelemetry.Point point : preview.points()) {
             BlockPos center = BlockPos.ofFloored(point.x(), point.y(), point.z());
             for (int dx = -1; dx <= 1; dx++) {
@@ -253,7 +255,7 @@ public final class DIPXClient implements ClientModInitializer {
                     for (int dz = -1; dz <= 1; dz++) {
                         BlockPos pos = center.add(dx, dy, dz).toImmutable();
                         var state = client.world.getBlockState(pos);
-                        if (!state.isAir() && !state.isOf(Blocks.WATER)) {
+                        if (!state.isAir() && !(preserveWater && state.isOf(Blocks.WATER))) {
                             if (!client.world.setBlockState(pos, Blocks.AIR.getDefaultState())) {
                                 throw new IllegalStateException("Pearl smoke path could not clear " + pos
                                         + " (chunk may not be loaded)");
@@ -266,9 +268,13 @@ public final class DIPXClient implements ClientModInitializer {
         }
     }
 
-    /** Builds the same centreline used by the HUD, but leaves collision handling to a live world query. */
+    /**
+     * Builds the vanilla centreline for the loaded-world smoke harness. The
+     * dry-corridor pass deliberately forces air drag; the actual preview pass
+     * samples vanilla's refreshed water state from the controlled fixture.
+     */
     private static PearlTrajectoryTelemetry.Preview tracePearlCenterline(
-            MinecraftClient client, PlayerEntity player, int maxTicks) {
+            MinecraftClient client, PlayerEntity player, int maxTicks, boolean sampleWater) {
         PearlPreviewProbe probe = new PearlPreviewProbe(client.world, player);
         probe.setVelocity(player, player.getPitch(), player.getYaw(),
                 0.0F, EnderPearlItem.POWER, 0.0F);
@@ -277,7 +283,7 @@ public final class DIPXClient implements ClientModInitializer {
         return PearlTrajectoryTelemetry.trace(
                 new PearlTrajectoryTelemetry.Point(origin.x, origin.y, origin.z, 0),
                 velocity.x, velocity.y, velocity.z, 0.03, maxTicks, null,
-                point -> point.tick() == 0
+                point -> !sampleWater || point.tick() == 0
                         ? new PearlTrajectoryTelemetry.DragSample(PEARL_AIR_DRAG, false)
                         : pearlDragAt(probe, point));
     }
@@ -384,12 +390,20 @@ public final class DIPXClient implements ClientModInitializer {
                 player.setYaw(yaws[scenario]);
                 player.setPitch(pitches[scenario]);
 
+                // First clear the entire dry centreline, including any naturally
+                // generated water. This keeps downward tests independent of the
+                // random lake/river layout around the integrated world's spawn.
+                PearlTrajectoryTelemetry.Preview dryCorridor =
+                        tracePearlCenterline(client, player, smokeTicks, false);
+                clearPearlSmokePath(client, dryCorridor, false);
+
                 if (scenario == 4) {
                     placePearlWaterPath(client, player, smokeTicks);
                 } else if (scenario == 5) {
                     placePearlWaterEdgePath(client, anchor);
                 }
-                PearlTrajectoryTelemetry.Preview predicted = tracePearlCenterline(client, player, smokeTicks);
+                PearlTrajectoryTelemetry.Preview predicted =
+                        tracePearlCenterline(client, player, smokeTicks, true);
                 if (predicted.stopReason() != PearlTrajectoryTelemetry.StopReason.RANGE_LIMIT
                         || predicted.points().size() != smokeTicks + 1) {
                     throw new IllegalStateException(names[scenario] + " preview did not produce " + smokeTicks + " clear ticks: "
@@ -405,7 +419,7 @@ public final class DIPXClient implements ClientModInitializer {
                     }
                 }
 
-                clearPearlSmokePath(client, predicted);
+                clearPearlSmokePath(client, predicted, scenario >= 4);
                 double maximumError = comparePearlToVanillaTick(
                         client, player, predicted, smokeTicks, scenario >= 4);
                 if (!Double.isFinite(maximumError) || maximumError > 0.08) {
