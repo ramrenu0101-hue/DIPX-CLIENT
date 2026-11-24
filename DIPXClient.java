@@ -239,6 +239,33 @@ public final class DIPXClient implements ClientModInitializer {
         smokePearlTestBlocks.add(immutable);
     }
 
+    /**
+     * The smoke world's natural terrain is seed-dependent. Clear only non-water
+     * blocks along the predicted path so vanilla tick comparison tests projectile
+     * physics rather than an accidental hillside collision. Water fixtures remain.
+     */
+    private static void clearPearlSmokePath(MinecraftClient client,
+                                             PearlTrajectoryTelemetry.Preview preview) {
+        for (PearlTrajectoryTelemetry.Point point : preview.points()) {
+            BlockPos center = BlockPos.ofFloored(point.x(), point.y(), point.z());
+            for (int dx = -1; dx <= 1; dx++) {
+                for (int dy = -1; dy <= 1; dy++) {
+                    for (int dz = -1; dz <= 1; dz++) {
+                        BlockPos pos = center.add(dx, dy, dz).toImmutable();
+                        var state = client.world.getBlockState(pos);
+                        if (!state.isAir() && !state.isOf(Blocks.WATER)) {
+                            if (!client.world.setBlockState(pos, Blocks.AIR.getDefaultState())) {
+                                throw new IllegalStateException("Pearl smoke path could not clear " + pos
+                                        + " (chunk may not be loaded)");
+                            }
+                            smokePearlTestBlocks.add(pos);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     /** Builds the same centreline used by the HUD, but leaves collision handling to a live world query. */
     private static PearlTrajectoryTelemetry.Preview tracePearlCenterline(
             MinecraftClient client, PlayerEntity player, int maxTicks) {
@@ -378,6 +405,7 @@ public final class DIPXClient implements ClientModInitializer {
                     }
                 }
 
+                clearPearlSmokePath(client, predicted);
                 double maximumError = comparePearlToVanillaTick(
                         client, player, predicted, smokeTicks, scenario >= 4);
                 if (!Double.isFinite(maximumError) || maximumError > 0.08) {
@@ -390,6 +418,7 @@ public final class DIPXClient implements ClientModInitializer {
 
                 PearlTrajectoryTelemetry.Point target = predicted.points().get(10);
                 BlockPos targetBlock = BlockPos.ofFloored(target.x(), target.y(), target.z());
+                int wallStart = smokePearlTestBlocks.size();
                 for (int dx = -1; dx <= 1; dx++) {
                     for (int dy = -1; dy <= 1; dy++) {
                         for (int dz = -1; dz <= 1; dz++) {
@@ -397,12 +426,13 @@ public final class DIPXClient implements ClientModInitializer {
                         }
                     }
                 }
-                if (smokePearlTestBlocks.size() < 27) {
+                int wallBlocks = smokePearlTestBlocks.size() - wallStart;
+                if (wallBlocks < 27) {
                     throw new IllegalStateException(names[scenario] + " collision wall fixture was incomplete: "
-                            + smokePearlTestBlocks.size() + "/27 blocks applied");
+                            + wallBlocks + "/27 blocks applied");
                 }
                 LOGGER.info("DIPX pearl smoke collision wall placed scenario={} blocks={} target={}",
-                        names[scenario], smokePearlTestBlocks.size(), targetBlock);
+                        names[scenario], wallBlocks, targetBlock);
                 lastPearlPreviewTick = Integer.MIN_VALUE;
                 updatePearlPreview(client);
                 if (pearlPreview.stopReason() != PearlTrajectoryTelemetry.StopReason.BLOCK
