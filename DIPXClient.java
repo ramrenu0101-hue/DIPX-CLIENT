@@ -5,6 +5,7 @@ import com.dipx.client.module.DIPXModule;
 import com.dipx.client.module.ModuleRegistry;
 import com.dipx.client.module.ModuleConfigStore;
 import com.dipx.client.module.PearlTrajectoryTelemetry;
+import com.dipx.client.module.MaceLandingTelemetry;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.loader.api.FabricLoader;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
@@ -30,6 +31,7 @@ import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Box;
 import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.RaycastContext;
 import net.minecraft.registry.tag.FluidTags;
 import net.minecraft.item.Items;
 import net.minecraft.item.EnderPearlItem;
@@ -956,6 +958,31 @@ public final class DIPXClient implements ClientModInitializer {
                         maceHeld, vanillaSmashReady, client.player.fallDistance, velocity.y);
                 drawContext.drawText(client.textRenderer, Text.literal(impactLine),
                         x, y, vanillaSmashReady && maceHeld ? 0xFF9AF5BD : 0xFFFF9B75, true);
+                y += 12;
+            }
+
+            if (enabled("Mace Landing HUD")) {
+                boolean maceHeld = client.player.getMainHandStack().isOf(Items.MACE);
+                String landingLine;
+                if (!maceHeld) {
+                    landingLine = MaceLandingTelemetry.landingLine(false, 0.0, 0.0, 80);
+                } else {
+                    Vec3d feet = new Vec3d(client.player.getX(),
+                            client.player.getBoundingBox().minY + 0.05, client.player.getZ());
+                    Vec3d floorEnd = feet.add(0.0, -64.0, 0.0);
+                    BlockHitResult floorHit = client.world.raycast(new RaycastContext(
+                            feet, floorEnd, RaycastContext.ShapeType.COLLIDER,
+                            RaycastContext.FluidHandling.NONE, client.player));
+                    if (floorHit.getType() == HitResult.Type.MISS) {
+                        landingLine = MaceLandingTelemetry.noFloorLine(true);
+                    } else {
+                        double floorGap = Math.max(0.0, feet.y - floorHit.getPos().y);
+                        landingLine = MaceLandingTelemetry.landingLine(
+                                true, floorGap, client.player.getVelocity().y, 80);
+                    }
+                }
+                drawContext.drawText(client.textRenderer, Text.literal(landingLine),
+                        x, y, 0xFFFFC58A, true);
                 y += 12;
             }
 

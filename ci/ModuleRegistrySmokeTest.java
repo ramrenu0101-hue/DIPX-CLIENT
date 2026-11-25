@@ -19,7 +19,7 @@ public final class ModuleRegistrySmokeTest {
     public static void main(String[] args) {
         ModuleRegistry.registerDefaults();
         List<DIPXModule> modules = ModuleRegistry.all();
-        check(modules.size() == 18, "Expected 18 implemented modules, got " + modules.size());
+        check(modules.size() == 19, "Expected 19 implemented modules, got " + modules.size());
         check(ModuleRegistry.enabledCount() == 0, "Modules must start disabled");
 
         Set<String> names = new HashSet<>();
@@ -32,6 +32,7 @@ public final class ModuleRegistrySmokeTest {
         }
 
         check(names.contains("Mace Smash HUD"), "Mace timing HUD is missing");
+        check(names.contains("Mace Landing HUD"), "Mace landing timing HUD is missing");
         check(names.contains("Spear Inventory HUD"), "Spear inventory HUD is missing");
         check(names.contains("Breach Status HUD"), "Breach status HUD is missing");
         check(names.contains("Weapon Swap HUD"), "Weapon swap HUD is missing");
@@ -93,6 +94,45 @@ public final class ModuleRegistrySmokeTest {
                 true, false, Double.NaN, Double.NEGATIVE_INFINITY);
         check(maceSanitized.equals("Mace: WAIT | Fall: 0.0 | Down: 0.00 b/t"),
                 "Invalid Mace telemetry inputs were not sanitized: " + maceSanitized);
+
+        int maceLandingTicks = MaceLandingTelemetry.estimateTicksToGround(
+                4.0, -0.20, 0.08, 0.98, 80);
+        check(maceLandingTicks > 0 && maceLandingTicks < 80,
+                "Falling Mace landing estimate did not converge: " + maceLandingTicks);
+        check(MaceLandingTelemetry.estimateTicksToGround(
+                        0.05, 0.0, 0.08, 0.98, 80) == 0,
+                "Near-ground Mace landing should resolve immediately");
+        int risingLandingTicks = MaceLandingTelemetry.estimateTicksToGround(
+                4.0, 0.25, 0.08, 0.98, 80);
+        check(risingLandingTicks > maceLandingTicks,
+                "Rising player should take longer to reach the floor");
+        check(MaceLandingTelemetry.estimateTicksToGround(
+                        1000.0, -0.2, 0.08, 0.98, 5) == -1,
+                "Landing estimator ignored its bounded prediction horizon");
+        check(MaceLandingTelemetry.estimateTicksToGround(
+                        Double.NaN, -0.2, 0.08, 0.98, 80) == -1,
+                "Invalid landing input was not rejected");
+
+        String maceLandingNotHeld = MaceLandingTelemetry.landingLine(false, 4.0, -0.2, 80);
+        check(maceLandingNotHeld.equals("Mace landing: NOT HELD"),
+                "Landing HUD must require a held mace: " + maceLandingNotHeld);
+        String maceLandingGround = MaceLandingTelemetry.landingLine(true, 0.05, 0.0, 80);
+        check(maceLandingGround.equals("Mace landing: GROUND | gap: 0.1m"),
+                "Near-ground landing status is incorrect: " + maceLandingGround);
+        String maceLandingRising = MaceLandingTelemetry.landingLine(true, 4.0, 0.25, 80);
+        check(maceLandingRising.equals("Mace landing: RISING | gap: 4.0m | up: 0.25 b/t"),
+                "Rising landing status is incorrect: " + maceLandingRising);
+        String maceLandingFalling = MaceLandingTelemetry.landingLine(true, 4.0, -0.20, 80);
+        check(maceLandingFalling.contains("~" + maceLandingTicks + "t")
+                        && maceLandingFalling.contains("gap: 4.0m")
+                        && maceLandingFalling.contains("down: 0.20 b/t"),
+                "Falling landing estimate is incorrect: " + maceLandingFalling);
+        String maceLandingBeyondHorizon = MaceLandingTelemetry.landingLine(true, 1000.0, -0.2, 5);
+        check(maceLandingBeyondHorizon.contains(">5t"),
+                "Landing HUD did not report a bounded horizon: " + maceLandingBeyondHorizon);
+        check(MaceLandingTelemetry.landingLine(true, Double.NaN, -0.2, 80)
+                        .equals("Mace landing: UNAVAILABLE"),
+                "Invalid landing display input was not handled safely");
 
         String noPlayerTarget = com.dipx.client.module.ShieldStatusTelemetry.shieldLine(
                 false, true, true, 20, 336);
@@ -176,7 +216,7 @@ public final class ModuleRegistrySmokeTest {
         check(ModuleRegistry.enabledCount() == 0, "Enabled count did not reset");
 
         ModuleRegistry.registerDefaults();
-        check(ModuleRegistry.all().size() == 18, "Repeated registration duplicated modules");
+        check(ModuleRegistry.all().size() == 19, "Repeated registration duplicated modules");
 
         // Settings round-trip through a temporary config directory, never the user's config.
         java.nio.file.Path configDirectory = null;
@@ -186,17 +226,20 @@ public final class ModuleRegistrySmokeTest {
                     .filter(module -> module.name().equals("FullBright")).findFirst().orElseThrow();
             DIPXModule spearAssist = modules.stream()
                     .filter(module -> module.name().equals("Spear Assist HUD")).findFirst().orElseThrow();
+            DIPXModule maceLanding = modules.stream()
+                    .filter(module -> module.name().equals("Mace Landing HUD")).findFirst().orElseThrow();
             fullBright.setEnabled(true);
             spearAssist.setEnabled(true);
+            maceLanding.setEnabled(true);
             ModuleConfigStore.save(configDirectory, modules);
             java.nio.file.Path configFile = configDirectory.resolve(ModuleConfigStore.FILE_NAME);
             check(java.nio.file.Files.isRegularFile(configFile), "Config file was not written");
 
             for (DIPXModule module : modules) module.setEnabled(false);
             ModuleConfigStore.load(configDirectory, modules);
-            check(fullBright.enabled() && spearAssist.enabled(),
+            check(fullBright.enabled() && spearAssist.enabled() && maceLanding.enabled(),
                     "Enabled module states were not restored");
-            check(ModuleRegistry.enabledCount() == 2, "Restored enabled count is incorrect");
+            check(ModuleRegistry.enabledCount() == 3, "Restored enabled count is incorrect");
 
             java.util.Properties malformed = new java.util.Properties();
             malformed.setProperty("module.FullBright", "not-a-boolean");
@@ -209,7 +252,7 @@ public final class ModuleRegistrySmokeTest {
             check(fullBright.enabled(), "Malformed value should not overwrite a valid in-memory state");
             check(modules.stream().filter(module -> module.name().equals("Toggle Sprint"))
                     .findFirst().orElseThrow().enabled(), "Known setting was not loaded");
-            check(ModuleRegistry.enabledCount() == 3,
+            check(ModuleRegistry.enabledCount() == 4,
                     "Unknown settings or malformed values changed the wrong modules");
 
             java.nio.file.Files.writeString(configFile, "module.FullBright=\\uZZZZ\\n");
@@ -271,7 +314,7 @@ public final class ModuleRegistrySmokeTest {
             }
         }
 
-        System.out.println("DIPX regression checks passed: 18 modules, pearl/shield/Mace/Spear and movement telemetry, idempotent registry, "
+        System.out.println("DIPX regression checks passed: 19 modules, pearl/shield/Mace landing/Mace/Spear and movement telemetry, idempotent registry, "
                 + "enabled counter, immutable snapshot, and responsive layouts.");
     }
 }

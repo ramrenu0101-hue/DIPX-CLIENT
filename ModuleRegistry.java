@@ -34,6 +34,7 @@ public final class ModuleRegistry {
         add(pending, "Armor HUD", "Equipped armor status", ModuleCategory.PLAYER);
         add(pending, "Target Info HUD", "Target name and range", ModuleCategory.COMBAT);
         add(pending, "Mace Smash HUD", "Vanilla smash readiness, fall distance and descent speed", ModuleCategory.MACE_PVP);
+        add(pending, "Mace Landing HUD", "Floor gap and approximate landing ticks for manual smash timing", ModuleCategory.MACE_PVP);
         add(pending, "Mace Inventory HUD", "Mace count", ModuleCategory.MACE_PVP);
         add(pending, "Spear Inventory HUD", "Spear count", ModuleCategory.SPEAR_PVP);
         add(pending, "Breach Status HUD", "Target armor status", ModuleCategory.COMBAT);
