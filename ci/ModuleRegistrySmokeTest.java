@@ -5,6 +5,7 @@ import com.dipx.client.module.DIPXModule;
 import com.dipx.client.module.ModuleCategory;
 import com.dipx.client.module.ModuleRegistry;
 import com.dipx.client.module.ModuleConfigStore;
+import com.dipx.client.module.MaceLandingTelemetry;
 
 import java.util.HashSet;
 import java.util.List;
