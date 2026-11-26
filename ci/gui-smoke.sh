@@ -264,5 +264,10 @@ for scenario in one-block four-block twelve-block rising; do
     exit 1
   fi
 done
-echo "Loaded singleplayer world: Mace Landing HUD raycast passed four controlled floor scenarios." \
+if ! grep -Fq "DIPX spear range world smoke PASS" "$LOG"; then
+  echo "Missing passing vanilla Spear attack_range component world smoke."
+  tail -n 180 "$LOG"
+  exit 1
+fi
+echo "Loaded singleplayer world: Mace Landing raycast and vanilla Spear reach component checks passed." \
   | tee -a gui-smoke/smoke-status.txt
