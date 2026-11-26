@@ -33,6 +33,7 @@ import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.RaycastContext;
 import net.minecraft.registry.tag.FluidTags;
+import net.minecraft.registry.tag.ItemTags;
 import net.minecraft.item.Items;
 import net.minecraft.item.EnderPearlItem;
 import net.minecraft.item.MaceItem;
@@ -512,6 +513,29 @@ public final class DIPXClient implements ClientModInitializer {
                 true, floorGap, client.player.getVelocity().y, 80);
     }
 
+    /** Reads the held spear's effective vanilla range and current crosshair result. */
+    private static String currentSpearRangeLine(MinecraftClient client) {
+        if (client.player == null || client.world == null) {
+            return "Spear reach: UNAVAILABLE";
+        }
+        boolean spearHeld = client.player.getMainHandStack().isIn(ItemTags.SPEARS);
+        if (!spearHeld) {
+            return com.dipx.client.module.CombatHudTelemetry.spearRangeLine(
+                    false, 0.0, 0.0, false, Double.NaN, false);
+        }
+
+        var range = client.player.getAttackRange();
+        boolean entityUnderCrosshair = client.crosshairTarget instanceof EntityHitResult;
+        double targetDistance = entityUnderCrosshair
+                ? client.player.distanceTo(((EntityHitResult) client.crosshairTarget).getEntity())
+                : Double.NaN;
+        boolean blockUnderCrosshair = client.crosshairTarget instanceof BlockHitResult;
+        return com.dipx.client.module.CombatHudTelemetry.spearRangeLine(
+                true, range.getEffectiveMinRange(client.player),
+                range.getEffectiveMaxRange(client.player),
+                entityUnderCrosshair, targetDistance, blockUnderCrosshair);
+    }
+
     /** Exercises the real loaded-world floor raycast and displayed landing estimate. */
     private static void runMaceLandingWorldSmokeTests(MinecraftClient client) {
         if (!Boolean.getBoolean("dipx.smoke.gui") || !smokePearlWorldTestsSucceeded
@@ -584,6 +608,31 @@ public final class DIPXClient implements ClientModInitializer {
                 }
                 LOGGER.info("DIPX mace landing world smoke PASS scenario={} result={}",
                         names[scenario], line);
+            }
+
+            // Validate the actual 1.21.11 spear attack_range component in a
+            // survival-like state. The HUD reads this same effective vanilla
+            // component; it does not infer a hard-coded reach from item names.
+            boolean originalCreativeMode = player.getAbilities().creativeMode;
+            var maceStack = player.getInventory().getStack(selectedSlot).copy();
+            try {
+                player.getAbilities().creativeMode = false;
+                player.getInventory().setStack(selectedSlot, Items.IRON_SPEAR.getDefaultStack());
+                var spearAttackRange = player.getAttackRange();
+                if (Math.abs(spearAttackRange.minRange() - 2.0f) > 0.001f
+                        || Math.abs(spearAttackRange.maxRange() - 4.5f) > 0.001f) {
+                    throw new IllegalStateException("Iron spear vanilla attack_range mismatch: min="
+                            + spearAttackRange.minRange() + " max=" + spearAttackRange.maxRange());
+                }
+                String spearLine = currentSpearRangeLine(client);
+                if (!spearLine.contains("2.0-4.5m")) {
+                    throw new IllegalStateException("Spear reach HUD did not use effective survival range: "
+                            + spearLine);
+                }
+                LOGGER.info("DIPX spear range world smoke PASS result={}", spearLine);
+            } finally {
+                player.getInventory().setStack(selectedSlot, maceStack);
+                player.getAbilities().creativeMode = originalCreativeMode;
             }
             LOGGER.info("DIPX mace landing world smoke complete scenarios=4");
         } catch (Throwable error) {
@@ -984,6 +1033,13 @@ public final class DIPXClient implements ClientModInitializer {
                 String spearAssist = (spearSlot < 0 ? "Spear: not in hotbar"
                         : "Spear slot: " + spearSlot) + "  |  Crosshair: " + targetRange;
                 drawContext.drawText(client.textRenderer, Text.literal(spearAssist),
+                        x, y, 0xFF9CE8FF, true);
+                y += 12;
+
+                String spearReach = currentSpearRangeLine(client);
+                int availableHudWidth = Math.max(1, client.getWindow().getScaledWidth() - x - 8);
+                spearReach = client.textRenderer.trimToWidth(spearReach, availableHudWidth);
+                drawContext.drawText(client.textRenderer, Text.literal(spearReach),
                         x, y, 0xFF9CE8FF, true);
                 y += 12;
             }
