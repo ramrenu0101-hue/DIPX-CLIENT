@@ -32,6 +32,7 @@ import net.minecraft.util.math.Box;
 import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.RaycastContext;
+import net.minecraft.world.GameMode;
 import net.minecraft.registry.tag.FluidTags;
 import net.minecraft.registry.tag.ItemTags;
 import net.minecraft.item.Items;
@@ -612,7 +613,7 @@ public final class DIPXClient implements ClientModInitializer {
 
             // Validate the vanilla attack_range component and the HUD's inclusive
             // minimum/maximum classification against real 1.21.11 player data.
-            boolean originalCreativeMode = player.getAbilities().creativeMode;
+            GameMode originalGameMode = client.interactionManager.getCurrentGameMode();
             var maceStack = player.getInventory().getStack(selectedSlot).copy();
             HitResult savedCrosshairTarget = client.crosshairTarget;
             try {
@@ -628,7 +629,10 @@ public final class DIPXClient implements ClientModInitializer {
                             + " creativeMax=" + spearAttackRange.maxCreativeRange());
                 }
 
-                player.getAbilities().creativeMode = false;
+                client.interactionManager.setGameMode(GameMode.SURVIVAL);
+                if (player.getGameMode() != GameMode.SURVIVAL) {
+                    throw new IllegalStateException("Client interaction manager did not enter survival mode");
+                }
                 if (Math.abs(spearAttackRange.getEffectiveMaxRange(player) - 4.5f) > 0.001f) {
                     throw new IllegalStateException("Survival spear effective reach was not 4.5 blocks: "
                             + spearAttackRange.getEffectiveMaxRange(player));
@@ -655,8 +659,8 @@ public final class DIPXClient implements ClientModInitializer {
                             scenarioNames[scenario], spearLine);
                 }
 
-                player.getAbilities().creativeMode = true;
-                if (!originalCreativeMode
+                client.interactionManager.setGameMode(GameMode.CREATIVE);
+                if (originalGameMode != GameMode.CREATIVE || player.getGameMode() != GameMode.CREATIVE
                         || Math.abs(spearAttackRange.getEffectiveMaxRange(player) - 6.5f) > 0.001f) {
                     throw new IllegalStateException("Creative spear effective reach was not 6.5 blocks: "
                             + spearAttackRange.getEffectiveMaxRange(player));
@@ -674,7 +678,7 @@ public final class DIPXClient implements ClientModInitializer {
             } finally {
                 client.crosshairTarget = savedCrosshairTarget;
                 player.getInventory().setStack(selectedSlot, maceStack);
-                player.getAbilities().creativeMode = originalCreativeMode;
+                client.interactionManager.setGameMode(originalGameMode);
             }
             LOGGER.info("DIPX mace landing world smoke complete scenarios=4");
         } catch (Throwable error) {
