@@ -122,7 +122,7 @@ jobs:
           jar tf "$JAR" | grep -q com/dipx/client/module/PearlTrajectoryTelemetry.class
           grep -q "Spear Charge HUD" DIPXClient.java
           grep -q "CombatHudTelemetry.spearRangeLine" DIPXClient.java
-          grep -q "getPos().distanceTo(client.player.getEyePos())" DIPXClient.java
+          grep -q "getEyePos().distanceTo(((EntityHitResult) client.crosshairTarget).getPos())" DIPXClient.java
           grep -q "ENTITY IN RANGE" CombatHudTelemetry.java
           grep -q "ItemTags.SPEARS" DIPXClient.java
           grep -q "getAttackRange" DIPXClient.java
