@@ -54,6 +54,27 @@ public final class ModuleRegistrySmokeTest {
         check(sanitizedSpear.equals("Spear charge: 0t | Horizontal speed: 0.00 b/t"),
                 "Invalid telemetry inputs were not sanitized: " + sanitizedSpear);
 
+        String spearNotHeld = com.dipx.client.module.CombatHudTelemetry.spearRangeLine(
+                false, 2.0, 4.5, false, Double.NaN, false);
+        check(spearNotHeld.equals("Spear reach: NOT HELD"),
+                "Spear reach HUD must require a held spear: " + spearNotHeld);
+        String spearNoTarget = com.dipx.client.module.CombatHudTelemetry.spearRangeLine(
+                true, 2.0, 4.5, false, Double.NaN, false);
+        check(spearNoTarget.equals("Spear reach: 2.0-4.5m | NO TARGET"),
+                "Vanilla spear reach bounds were not displayed: " + spearNoTarget);
+        String spearEntity = com.dipx.client.module.CombatHudTelemetry.spearRangeLine(
+                true, 2.0, 4.5, true, 3.7, false);
+        check(spearEntity.equals("Spear reach: 2.0-4.5m | ENTITY 3.7m"),
+                "Crosshair entity distance was not displayed: " + spearEntity);
+        String spearBlock = com.dipx.client.module.CombatHudTelemetry.spearRangeLine(
+                true, 2.0, 4.5, false, Double.NaN, true);
+        check(spearBlock.equals("Spear reach: 2.0-4.5m | BLOCK HIT"),
+                "Block obstruction state was not displayed: " + spearBlock);
+        String spearInvalidRange = com.dipx.client.module.CombatHudTelemetry.spearRangeLine(
+                true, Double.NaN, 4.5, false, Double.NaN, false);
+        check(spearInvalidRange.equals("Spear reach: UNAVAILABLE"),
+                "Invalid spear range was not handled safely: " + spearInvalidRange);
+
         String groundedMovement = com.dipx.client.module.MovementHudTelemetry.movementLine(
                 0.0, 0.0, true, false, false);
         check(groundedMovement.equals("Move: 0.00 b/t | Y: +0.00 | GROUND | NORMAL"),
