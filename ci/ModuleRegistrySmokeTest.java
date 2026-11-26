@@ -62,6 +62,10 @@ public final class ModuleRegistrySmokeTest {
                 true, 2.0, 4.5, false, Double.NaN, false);
         check(spearNoTarget.equals("Spear reach: 2.0-4.5m | NO TARGET"),
                 "Vanilla spear reach bounds were not displayed: " + spearNoTarget);
+        String spearCreativeRange = com.dipx.client.module.CombatHudTelemetry.spearRangeLine(
+                true, 2.0, 6.5, false, Double.NaN, false);
+        check(spearCreativeRange.equals("Spear reach: 2.0-6.5m | NO TARGET"),
+                "Creative spear reach was not displayed from the active component: " + spearCreativeRange);
         String spearEntity = com.dipx.client.module.CombatHudTelemetry.spearRangeLine(
                 true, 2.0, 4.5, true, 3.7, false);
         check(spearEntity.equals("Spear reach: 2.0-4.5m | ENTITY 3.7m"),
