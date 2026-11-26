@@ -610,23 +610,31 @@ public final class DIPXClient implements ClientModInitializer {
                         names[scenario], line);
             }
 
-            // Validate the actual 1.21.11 spear attack_range component in a
-            // survival-like state. The HUD reads this same effective vanilla
-            // component; it does not infer a hard-coded reach from item names.
+            // Validate the actual 1.21.11 spear attack_range component in the
+            // creative singleplayer smoke world. The component carries distinct
+            // survival and creative maxima; the HUD must display the active one.
             boolean originalCreativeMode = player.getAbilities().creativeMode;
             var maceStack = player.getInventory().getStack(selectedSlot).copy();
             try {
-                player.getAbilities().creativeMode = false;
                 player.getInventory().setStack(selectedSlot, Items.IRON_SPEAR.getDefaultStack());
                 var spearAttackRange = player.getAttackRange();
                 if (Math.abs(spearAttackRange.minRange() - 2.0f) > 0.001f
-                        || Math.abs(spearAttackRange.maxRange() - 4.5f) > 0.001f) {
-                    throw new IllegalStateException("Iron spear vanilla attack_range mismatch: min="
-                            + spearAttackRange.minRange() + " max=" + spearAttackRange.maxRange());
+                        || Math.abs(spearAttackRange.maxRange() - 4.5f) > 0.001f
+                        || Math.abs(spearAttackRange.minCreativeRange() - 2.0f) > 0.001f
+                        || Math.abs(spearAttackRange.maxCreativeRange() - 6.5f) > 0.001f) {
+                    throw new IllegalStateException("Iron spear vanilla attack_range component mismatch: "
+                            + "min=" + spearAttackRange.minRange() + " max=" + spearAttackRange.maxRange()
+                            + " creativeMin=" + spearAttackRange.minCreativeRange()
+                            + " creativeMax=" + spearAttackRange.maxCreativeRange());
+                }
+                if (!originalCreativeMode
+                        || Math.abs(spearAttackRange.getEffectiveMaxRange(player) - 6.5f) > 0.001f) {
+                    throw new IllegalStateException("Creative spear effective reach was not 6.5 blocks: "
+                            + spearAttackRange.getEffectiveMaxRange(player));
                 }
                 String spearLine = currentSpearRangeLine(client);
-                if (!spearLine.contains("2.0-4.5m")) {
-                    throw new IllegalStateException("Spear reach HUD did not use effective survival range: "
+                if (!spearLine.contains("2.0-6.5m")) {
+                    throw new IllegalStateException("Spear reach HUD did not use effective creative range: "
                             + spearLine);
                 }
                 LOGGER.info("DIPX spear range world smoke PASS result={}", spearLine);
