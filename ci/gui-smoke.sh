@@ -240,3 +240,29 @@ done
 import -window "$WINDOW" gui-smoke/Pearl-world-smoke.png
 echo "Loaded singleplayer world: all six pearl paths matched vanilla ticks and hit the live ClientWorld test wall." \
   | tee -a gui-smoke/smoke-status.txt
+
+# Validate the Mace Landing HUD against controlled collidable floors in the same
+# loaded singleplayer world; the one-time GUI screenshot above remains unchanged.
+for attempt in $(seq 1 150); do
+  if grep -q "DIPX mace landing world smoke complete scenarios=4" "$LOG"; then break; fi
+  if grep -q "DIPX mace landing world smoke FAILED" "$LOG"; then
+    echo "Loaded-world Mace landing integration test failed."
+    tail -n 180 "$LOG"
+    exit 1
+  fi
+  sleep 2
+done
+if ! grep -q "DIPX mace landing world smoke complete scenarios=4" "$LOG"; then
+  echo "Timed out waiting for the loaded-world Mace landing integration test."
+  tail -n 180 "$LOG"
+  exit 1
+fi
+for scenario in one-block four-block twelve-block rising; do
+  if ! grep -Fq "DIPX mace landing world smoke PASS scenario=$scenario " "$LOG"; then
+    echo "Missing passing Mace landing world scenario: $scenario"
+    tail -n 180 "$LOG"
+    exit 1
+  fi
+done
+echo "Loaded singleplayer world: Mace Landing HUD raycast passed four controlled floor scenarios." \
+  | tee -a gui-smoke/smoke-status.txt

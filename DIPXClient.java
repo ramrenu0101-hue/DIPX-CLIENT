@@ -60,6 +60,8 @@ public final class DIPXClient implements ClientModInitializer {
     private static boolean smokeWorldScreenOpened;
     private static boolean smokeWorldCreationStarted;
     private static boolean smokePearlWorldTestsComplete;
+    private static boolean smokePearlWorldTestsSucceeded;
+    private static boolean smokeMaceLandingTestsComplete;
     private static final List<BlockPos> smokePearlTestBlocks = new ArrayList<>();
     private static PearlTrajectoryTelemetry.Preview pearlPreview = PearlTrajectoryTelemetry.unavailable();
     private static boolean pearlAvailable;
@@ -185,7 +187,8 @@ public final class DIPXClient implements ClientModInitializer {
         }
         try {
             for (DIPXModule module : ModuleRegistry.all()) {
-                if (module.name().equals("Pearl Trajectory HUD")) module.setEnabled(true);
+                if (module.name().equals("Pearl Trajectory HUD")
+                        || module.name().equals("Mace Landing HUD")) module.setEnabled(true);
             }
             CreateWorldScreen.show(client, () -> {});
             smokeWorldScreenOpened = true;
@@ -464,6 +467,7 @@ public final class DIPXClient implements ClientModInitializer {
                         names[scenario], String.format(java.util.Locale.ROOT, "%.5f", maximumError),
                         pearlPreview.stopReason(), pearlPreview.ticks(), pearlPreview.touchedFluid());
             }
+            smokePearlWorldTestsSucceeded = true;
             LOGGER.info("DIPX pearl world smoke complete scenarios=6");
         } catch (Throwable error) {
             LOGGER.error("DIPX pearl world smoke FAILED", error);
@@ -474,6 +478,124 @@ public final class DIPXClient implements ClientModInitializer {
             player.setYaw(savedYaw);
             player.setPitch(savedPitch);
             smokePearlWorldTestsComplete = true;
+        }
+    }
+
+
+    /**
+     * Uses the player's feet (not the offset ray origin) for the displayed gap.
+     * The +0.05 ray offset avoids starting inside the player's own collision box.
+     */
+    private static String maceLandingLine(MinecraftClient client) {
+        if (client.player == null || client.world == null) {
+            return "Mace landing: UNAVAILABLE";
+        }
+        boolean maceHeld = client.player.getMainHandStack().isOf(Items.MACE);
+        if (!maceHeld) {
+            return MaceLandingTelemetry.landingLine(false, 0.0, 0.0, 80);
+        }
+
+        double feetY = client.player.getBoundingBox().minY;
+        Vec3d rayStart = new Vec3d(client.player.getX(), feetY + 0.05, client.player.getZ());
+        Vec3d rayEnd = rayStart.add(0.0, -64.0, 0.0);
+        BlockHitResult floorHit = client.world.raycast(new RaycastContext(
+                rayStart, rayEnd, RaycastContext.ShapeType.COLLIDER,
+                RaycastContext.FluidHandling.NONE, client.player));
+        if (floorHit.getType() == HitResult.Type.MISS) {
+            return MaceLandingTelemetry.noFloorLine(true);
+        }
+
+        // Measure from the actual feet. Measuring from rayStart adds the
+        // collision-avoidance offset and visibly overstates the gap by 0.05m.
+        double floorGap = Math.max(0.0, feetY - floorHit.getPos().y);
+        return MaceLandingTelemetry.landingLine(
+                true, floorGap, client.player.getVelocity().y, 80);
+    }
+
+    /** Exercises the real loaded-world floor raycast and displayed landing estimate. */
+    private static void runMaceLandingWorldSmokeTests(MinecraftClient client) {
+        if (!Boolean.getBoolean("dipx.smoke.gui") || !smokePearlWorldTestsSucceeded
+                || smokeMaceLandingTestsComplete || !smokeWorldCreationStarted
+                || client.player == null || client.world == null) {
+            return;
+        }
+
+        PlayerEntity player = client.player;
+        Vec3d savedPosition = new Vec3d(player.getX(), player.getY(), player.getZ());
+        Vec3d savedVelocity = player.getVelocity();
+        float savedYaw = player.getYaw();
+        float savedPitch = player.getPitch();
+        int selectedSlot = player.getInventory().getSelectedSlot();
+        var savedStack = player.getInventory().getStack(selectedSlot).copy();
+        String[] names = {"one-block", "four-block", "twelve-block", "rising"};
+        double[] gaps = {1.0, 4.0, 12.0, 4.0};
+        double[] verticalSpeeds = {-0.20, -0.20, -0.20, 0.25};
+        int floorY = MathHelper.floor(savedPosition.y) + 8;
+        BlockPos anchor = BlockPos.ofFloored(savedPosition.x, floorY, savedPosition.z);
+
+        try {
+            player.getInventory().setStack(selectedSlot, Items.MACE.getDefaultStack());
+            for (int scenario = 0; scenario < names.length; scenario++) {
+                clearPearlSmokeBlocks(client);
+
+                // A five-by-five platform guarantees a collidable floor beneath
+                // the player's centre. Clear the vertical ray column so trees or
+                // naturally generated blocks cannot shadow the test platform.
+                for (int dx = -2; dx <= 2; dx++) {
+                    for (int dz = -2; dz <= 2; dz++) {
+                        placePearlSmokeBlock(client, anchor.add(dx, 0, dz), false);
+                    }
+                }
+                int clearTop = floorY + 1 + (int) Math.ceil(gaps[scenario]) + 2;
+                for (int y = floorY + 1; y <= clearTop; y++) {
+                    BlockPos column = new BlockPos(anchor.getX(), y, anchor.getZ());
+                    if (!client.world.getBlockState(column).isAir()) {
+                        if (!client.world.setBlockState(column, Blocks.AIR.getDefaultState())) {
+                            throw new IllegalStateException("Mace landing ray column could not be cleared at " + column);
+                        }
+                        smokePearlTestBlocks.add(column.toImmutable());
+                    }
+                }
+
+                player.setPosition(anchor.getX() + 0.5,
+                        floorY + 1.0 + gaps[scenario], anchor.getZ() + 0.5);
+                player.setVelocity(new Vec3d(0.0, verticalSpeeds[scenario], 0.0));
+                String line = maceLandingLine(client);
+                String expectedGap = String.format(java.util.Locale.ROOT, "%.1f", gaps[scenario]);
+                if (!line.contains("gap: " + expectedGap + "m")) {
+                    throw new IllegalStateException(names[scenario]
+                            + " raycast gap mismatch: expected " + expectedGap + "m, got " + line);
+                }
+
+                if (scenario == 3) {
+                    if (!line.contains("RISING") || !line.contains("up: 0.25 b/t")) {
+                        throw new IllegalStateException("Rising Mace state was not reported: " + line);
+                    }
+                } else {
+                    int expectedTicks = MaceLandingTelemetry.estimateTicksToGround(
+                            gaps[scenario], verticalSpeeds[scenario],
+                            MaceLandingTelemetry.DEFAULT_GRAVITY,
+                            MaceLandingTelemetry.DEFAULT_AIR_DRAG, 80);
+                    if (expectedTicks < 1 || !line.contains("~" + expectedTicks + "t")
+                            || !line.contains("down: 0.20 b/t")) {
+                        throw new IllegalStateException(names[scenario]
+                                + " landing ETA mismatch: expected ~" + expectedTicks + "t, got " + line);
+                    }
+                }
+                LOGGER.info("DIPX mace landing world smoke PASS scenario={} result={}",
+                        names[scenario], line);
+            }
+            LOGGER.info("DIPX mace landing world smoke complete scenarios=4");
+        } catch (Throwable error) {
+            LOGGER.error("DIPX mace landing world smoke FAILED", error);
+        } finally {
+            clearPearlSmokeBlocks(client);
+            player.setPosition(savedPosition.x, savedPosition.y, savedPosition.z);
+            player.setVelocity(savedVelocity);
+            player.setYaw(savedYaw);
+            player.setPitch(savedPitch);
+            player.getInventory().setStack(selectedSlot, savedStack);
+            smokeMaceLandingTestsComplete = true;
         }
     }
 
@@ -739,6 +861,7 @@ public final class DIPXClient implements ClientModInitializer {
                 openSmokeWorldCreator(client);
                 createSmokeWorld(client);
                 runPearlWorldSmokeTests(client);
+                runMaceLandingWorldSmokeTests(client);
             }
         });
 
@@ -962,25 +1085,7 @@ public final class DIPXClient implements ClientModInitializer {
             }
 
             if (enabled("Mace Landing HUD")) {
-                boolean maceHeld = client.player.getMainHandStack().isOf(Items.MACE);
-                String landingLine;
-                if (!maceHeld) {
-                    landingLine = MaceLandingTelemetry.landingLine(false, 0.0, 0.0, 80);
-                } else {
-                    Vec3d feet = new Vec3d(client.player.getX(),
-                            client.player.getBoundingBox().minY + 0.05, client.player.getZ());
-                    Vec3d floorEnd = feet.add(0.0, -64.0, 0.0);
-                    BlockHitResult floorHit = client.world.raycast(new RaycastContext(
-                            feet, floorEnd, RaycastContext.ShapeType.COLLIDER,
-                            RaycastContext.FluidHandling.NONE, client.player));
-                    if (floorHit.getType() == HitResult.Type.MISS) {
-                        landingLine = MaceLandingTelemetry.noFloorLine(true);
-                    } else {
-                        double floorGap = Math.max(0.0, feet.y - floorHit.getPos().y);
-                        landingLine = MaceLandingTelemetry.landingLine(
-                                true, floorGap, client.player.getVelocity().y, 80);
-                    }
-                }
+                String landingLine = maceLandingLine(client);
                 drawContext.drawText(client.textRenderer, Text.literal(landingLine),
                         x, y, 0xFFFFC58A, true);
                 y += 12;
