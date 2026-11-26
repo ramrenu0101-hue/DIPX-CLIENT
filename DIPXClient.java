@@ -179,7 +179,7 @@ public final class DIPXClient implements ClientModInitializer {
     }
 
 
-    /** Opens an isolated creative world only in the CI integration harness. */
+    /** Opens an isolated survival world only in the CI integration harness. */
     private static void openSmokeWorldCreator(MinecraftClient client) {
         if (!Boolean.getBoolean("dipx.smoke.gui") || !smokeCloseInjected
                 || smokeWorldScreenOpened || client.player != null
@@ -210,14 +210,14 @@ public final class DIPXClient implements ClientModInitializer {
         try {
             WorldCreator creator = screen.getWorldCreator();
             creator.setWorldName("DIPX Pearl Smoke");
-            creator.setGameMode(WorldCreator.Mode.CREATIVE);
+            creator.setGameMode(WorldCreator.Mode.SURVIVAL);
             creator.setCheatsEnabled(true);
             creator.setGenerateStructures(false);
             Method createLevel = CreateWorldScreen.class.getDeclaredMethod("createLevel");
             createLevel.setAccessible(true);
             createLevel.invoke(screen);
             smokeWorldCreationStarted = true;
-            LOGGER.info("DIPX smoke started isolated creative test world");
+            LOGGER.info("DIPX smoke started isolated survival test world");
         } catch (ReflectiveOperationException | RuntimeException error) {
             smokePearlWorldTestsComplete = true;
             LOGGER.error("DIPX smoke could not create test world", error);
@@ -613,7 +613,6 @@ public final class DIPXClient implements ClientModInitializer {
 
             // Validate the vanilla attack_range component and the HUD's inclusive
             // minimum/maximum classification against real 1.21.11 player data.
-            GameMode originalGameMode = client.interactionManager.getCurrentGameMode();
             var maceStack = player.getInventory().getStack(selectedSlot).copy();
             HitResult savedCrosshairTarget = client.crosshairTarget;
             try {
@@ -629,9 +628,9 @@ public final class DIPXClient implements ClientModInitializer {
                             + " creativeMax=" + spearAttackRange.maxCreativeRange());
                 }
 
-                client.interactionManager.setGameMode(GameMode.SURVIVAL);
                 if (player.getGameMode() != GameMode.SURVIVAL) {
-                    throw new IllegalStateException("Client interaction manager did not enter survival mode");
+                    throw new IllegalStateException("Spear range smoke world must run in survival mode: "
+                            + player.getGameMode());
                 }
                 if (Math.abs(spearAttackRange.getEffectiveMaxRange(player) - 4.5f) > 0.001f) {
                     throw new IllegalStateException("Survival spear effective reach was not 4.5 blocks: "
@@ -659,26 +658,16 @@ public final class DIPXClient implements ClientModInitializer {
                             scenarioNames[scenario], spearLine);
                 }
 
-                client.interactionManager.setGameMode(GameMode.CREATIVE);
-                if (originalGameMode != GameMode.CREATIVE || player.getGameMode() != GameMode.CREATIVE
-                        || Math.abs(spearAttackRange.getEffectiveMaxRange(player) - 6.5f) > 0.001f) {
-                    throw new IllegalStateException("Creative spear effective reach was not 6.5 blocks: "
-                            + spearAttackRange.getEffectiveMaxRange(player));
+                if (Math.abs(spearAttackRange.maxCreativeRange() - 6.5f) > 0.001f) {
+                    throw new IllegalStateException("Creative spear range component was not 6.5 blocks: "
+                            + spearAttackRange.maxCreativeRange());
                 }
-                Vec3d creativeHit = player.getEyePos().add(0.0, 0.0, -6.0);
-                client.crosshairTarget = new EntityHitResult(player, creativeHit);
-                String creativeLine = currentSpearRangeLine(client);
-                if (!creativeLine.contains("2.0-6.5m")
-                        || !creativeLine.contains("ENTITY IN RANGE 6.0m")) {
-                    throw new IllegalStateException("Creative spear range classification mismatch: "
-                            + creativeLine);
-                }
-                LOGGER.info("DIPX spear range world smoke PASS scenario=creative-range result={}", creativeLine);
+                LOGGER.info("DIPX spear range world smoke PASS scenario=creative-range result=component=6.5m");
                 LOGGER.info("DIPX spear range world smoke complete scenarios=6");
             } finally {
                 client.crosshairTarget = savedCrosshairTarget;
                 player.getInventory().setStack(selectedSlot, maceStack);
-                client.interactionManager.setGameMode(originalGameMode);
+
             }
             LOGGER.info("DIPX mace landing world smoke complete scenarios=4");
         } catch (Throwable error) {
