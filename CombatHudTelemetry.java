@@ -36,9 +36,19 @@ public final class CombatHudTelemetry {
         String range = String.format(Locale.ROOT, "%.1f-%.1fm", minReach, maxReach);
         String result;
         if (entityUnderCrosshair) {
-            result = Double.isFinite(targetDistance) && targetDistance >= 0.0
-                    ? "ENTITY " + String.format(Locale.ROOT, "%.1f", targetDistance) + "m"
-                    : "ENTITY UNDER CROSSHAIR";
+            if (!Double.isFinite(targetDistance) || targetDistance < 0.0) {
+                result = "ENTITY UNDER CROSSHAIR";
+            } else {
+                String distance = String.format(Locale.ROOT, "%.1f", targetDistance);
+                // The vanilla component defines an inclusive usable interval.
+                if (targetDistance + 0.0001 < minReach) {
+                    result = "ENTITY TOO CLOSE " + distance + "m";
+                } else if (targetDistance <= maxReach + 0.0001) {
+                    result = "ENTITY IN RANGE " + distance + "m";
+                } else {
+                    result = "ENTITY OUT OF RANGE " + distance + "m";
+                }
+            }
         } else if (blockUnderCrosshair) {
             result = "BLOCK HIT";
         } else {

@@ -527,7 +527,7 @@ public final class DIPXClient implements ClientModInitializer {
         var range = client.player.getAttackRange();
         boolean entityUnderCrosshair = client.crosshairTarget instanceof EntityHitResult;
         double targetDistance = entityUnderCrosshair
-                ? client.player.distanceTo(((EntityHitResult) client.crosshairTarget).getEntity())
+                ? client.player.getEyePos().distanceTo(((EntityHitResult) client.crosshairTarget).getPos())
                 : Double.NaN;
         boolean blockUnderCrosshair = client.crosshairTarget instanceof BlockHitResult;
         return com.dipx.client.module.CombatHudTelemetry.spearRangeLine(
@@ -610,11 +610,11 @@ public final class DIPXClient implements ClientModInitializer {
                         names[scenario], line);
             }
 
-            // Validate the actual 1.21.11 spear attack_range component in the
-            // creative singleplayer smoke world. The component carries distinct
-            // survival and creative maxima; the HUD must display the active one.
+            // Validate the vanilla attack_range component and the HUD's inclusive
+            // minimum/maximum classification against real 1.21.11 player data.
             boolean originalCreativeMode = player.getAbilities().creativeMode;
             var maceStack = player.getInventory().getStack(selectedSlot).copy();
+            HitResult savedCrosshairTarget = client.crosshairTarget;
             try {
                 player.getInventory().setStack(selectedSlot, Items.IRON_SPEAR.getDefaultStack());
                 var spearAttackRange = player.getAttackRange();
@@ -627,18 +627,52 @@ public final class DIPXClient implements ClientModInitializer {
                             + " creativeMin=" + spearAttackRange.minCreativeRange()
                             + " creativeMax=" + spearAttackRange.maxCreativeRange());
                 }
+
+                player.getAbilities().creativeMode = false;
+                if (Math.abs(spearAttackRange.getEffectiveMaxRange(player) - 4.5f) > 0.001f) {
+                    throw new IllegalStateException("Survival spear effective reach was not 4.5 blocks: "
+                            + spearAttackRange.getEffectiveMaxRange(player));
+                }
+                String[] scenarioNames = {"too-close", "min-boundary", "in-range", "max-boundary", "out-of-range"};
+                double[] hitDistances = {1.5, 2.0, 3.7, 4.5, 4.8};
+                String[] expectedStates = {
+                        "ENTITY TOO CLOSE 1.5m",
+                        "ENTITY IN RANGE 2.0m",
+                        "ENTITY IN RANGE 3.7m",
+                        "ENTITY IN RANGE 4.5m",
+                        "ENTITY OUT OF RANGE 4.8m"
+                };
+                for (int scenario = 0; scenario < scenarioNames.length; scenario++) {
+                    Vec3d hitPosition = player.getEyePos().add(0.0, 0.0, -hitDistances[scenario]);
+                    client.crosshairTarget = new EntityHitResult(player, hitPosition);
+                    String spearLine = currentSpearRangeLine(client);
+                    if (!spearLine.contains("2.0-4.5m")
+                            || !spearLine.contains(expectedStates[scenario])) {
+                        throw new IllegalStateException("Spear " + scenarioNames[scenario]
+                                + " classification mismatch: " + spearLine);
+                    }
+                    LOGGER.info("DIPX spear range world smoke PASS scenario={} result={}",
+                            scenarioNames[scenario], spearLine);
+                }
+
+                player.getAbilities().creativeMode = true;
                 if (!originalCreativeMode
                         || Math.abs(spearAttackRange.getEffectiveMaxRange(player) - 6.5f) > 0.001f) {
                     throw new IllegalStateException("Creative spear effective reach was not 6.5 blocks: "
                             + spearAttackRange.getEffectiveMaxRange(player));
                 }
-                String spearLine = currentSpearRangeLine(client);
-                if (!spearLine.contains("2.0-6.5m")) {
-                    throw new IllegalStateException("Spear reach HUD did not use effective creative range: "
-                            + spearLine);
+                Vec3d creativeHit = player.getEyePos().add(0.0, 0.0, -6.0);
+                client.crosshairTarget = new EntityHitResult(player, creativeHit);
+                String creativeLine = currentSpearRangeLine(client);
+                if (!creativeLine.contains("2.0-6.5m")
+                        || !creativeLine.contains("ENTITY IN RANGE 6.0m")) {
+                    throw new IllegalStateException("Creative spear range classification mismatch: "
+                            + creativeLine);
                 }
-                LOGGER.info("DIPX spear range world smoke PASS result={}", spearLine);
+                LOGGER.info("DIPX spear range world smoke PASS scenario=creative-range result={}", creativeLine);
+                LOGGER.info("DIPX spear range world smoke complete scenarios=6");
             } finally {
+                client.crosshairTarget = savedCrosshairTarget;
                 player.getInventory().setStack(selectedSlot, maceStack);
                 player.getAbilities().creativeMode = originalCreativeMode;
             }
@@ -1036,7 +1070,7 @@ public final class DIPXClient implements ClientModInitializer {
                 String targetRange = "no target";
                 if (client.crosshairTarget instanceof EntityHitResult spearHit) {
                     targetRange = String.format(java.util.Locale.ROOT, "%.1fm",
-                            client.player.distanceTo(spearHit.getEntity()));
+                            client.player.getEyePos().distanceTo(spearHit.getPos()));
                 }
                 String spearAssist = (spearSlot < 0 ? "Spear: not in hotbar"
                         : "Spear slot: " + spearSlot) + "  |  Crosshair: " + targetRange;

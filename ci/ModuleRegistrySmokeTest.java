@@ -66,10 +66,30 @@ public final class ModuleRegistrySmokeTest {
                 true, 2.0, 6.5, false, Double.NaN, false);
         check(spearCreativeRange.equals("Spear reach: 2.0-6.5m | NO TARGET"),
                 "Creative spear reach was not displayed from the active component: " + spearCreativeRange);
+        String spearTooClose = com.dipx.client.module.CombatHudTelemetry.spearRangeLine(
+                true, 2.0, 4.5, true, 1.5, false);
+        check(spearTooClose.equals("Spear reach: 2.0-4.5m | ENTITY TOO CLOSE 1.5m"),
+                "Target below vanilla minimum reach was not classified: " + spearTooClose);
+        String spearMinBoundary = com.dipx.client.module.CombatHudTelemetry.spearRangeLine(
+                true, 2.0, 4.5, true, 2.0, false);
+        check(spearMinBoundary.equals("Spear reach: 2.0-4.5m | ENTITY IN RANGE 2.0m"),
+                "Inclusive spear minimum boundary was not accepted: " + spearMinBoundary);
         String spearEntity = com.dipx.client.module.CombatHudTelemetry.spearRangeLine(
                 true, 2.0, 4.5, true, 3.7, false);
-        check(spearEntity.equals("Spear reach: 2.0-4.5m | ENTITY 3.7m"),
-                "Crosshair entity distance was not displayed: " + spearEntity);
+        check(spearEntity.equals("Spear reach: 2.0-4.5m | ENTITY IN RANGE 3.7m"),
+                "In-range crosshair entity was not classified: " + spearEntity);
+        String spearMaxBoundary = com.dipx.client.module.CombatHudTelemetry.spearRangeLine(
+                true, 2.0, 4.5, true, 4.5, false);
+        check(spearMaxBoundary.equals("Spear reach: 2.0-4.5m | ENTITY IN RANGE 4.5m"),
+                "Inclusive spear maximum boundary was not accepted: " + spearMaxBoundary);
+        String spearOutOfRange = com.dipx.client.module.CombatHudTelemetry.spearRangeLine(
+                true, 2.0, 4.5, true, 4.8, false);
+        check(spearOutOfRange.equals("Spear reach: 2.0-4.5m | ENTITY OUT OF RANGE 4.8m"),
+                "Target beyond vanilla maximum reach was not classified: " + spearOutOfRange);
+        String spearInvalidDistance = com.dipx.client.module.CombatHudTelemetry.spearRangeLine(
+                true, 2.0, 4.5, true, Double.NaN, false);
+        check(spearInvalidDistance.equals("Spear reach: 2.0-4.5m | ENTITY UNDER CROSSHAIR"),
+                "Invalid crosshair distance was not handled safely: " + spearInvalidDistance);
         String spearBlock = com.dipx.client.module.CombatHudTelemetry.spearRangeLine(
                 true, 2.0, 4.5, false, Double.NaN, true);
         check(spearBlock.equals("Spear reach: 2.0-4.5m | BLOCK HIT"),

@@ -264,10 +264,26 @@ for scenario in one-block four-block twelve-block rising; do
     exit 1
   fi
 done
-if ! grep -Fq "DIPX spear range world smoke PASS" "$LOG"; then
-  echo "Missing passing vanilla Spear attack_range component world smoke."
+for attempt in $(seq 1 60); do
+  if grep -q "DIPX spear range world smoke complete scenarios=6" "$LOG"; then break; fi
+  if grep -q "DIPX mace landing world smoke FAILED" "$LOG"; then
+    echo "Loaded-world Mace/Spear integration test failed."
+    tail -n 180 "$LOG"
+    exit 1
+  fi
+  sleep 2
+done
+if ! grep -q "DIPX spear range world smoke complete scenarios=6" "$LOG"; then
+  echo "Timed out waiting for all six Spear range world scenarios."
   tail -n 180 "$LOG"
   exit 1
 fi
-echo "Loaded singleplayer world: Mace Landing raycast and vanilla Spear reach component checks passed." \
+for scenario in too-close min-boundary in-range max-boundary out-of-range creative-range; do
+  if ! grep -Fq "DIPX spear range world smoke PASS scenario=$scenario " "$LOG"; then
+    echo "Missing passing Spear range world scenario: $scenario"
+    tail -n 180 "$LOG"
+    exit 1
+  fi
+done
+echo "Loaded singleplayer world: Mace Landing raycast and six vanilla Spear reach classifications passed." \
   | tee -a gui-smoke/smoke-status.txt
