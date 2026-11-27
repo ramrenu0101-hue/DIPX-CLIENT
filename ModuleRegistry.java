@@ -28,6 +28,7 @@ public final class ModuleRegistry {
         add(pending, "FullBright", "Gamma visibility", ModuleCategory.RENDER);
         add(pending, "Toggle Sprint", "Sprint while moving", ModuleCategory.MOVEMENT);
         add(pending, "Movement Telemetry HUD", "Speed, vertical motion and movement state", ModuleCategory.MOVEMENT);
+        add(pending, "Web Escape HUD", "Cobweb contact and movement feedback for manual escape", ModuleCategory.MOVEMENT);
         add(pending, "Coordinates HUD", "Live XYZ coordinates", ModuleCategory.PLAYER);
         add(pending, "Totem Counter", "Carried totem count", ModuleCategory.PLAYER);
         add(pending, "Wind Charge Counter", "Wind charge count", ModuleCategory.PLAYER);

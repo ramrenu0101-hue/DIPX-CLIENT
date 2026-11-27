@@ -6,6 +6,7 @@ import com.dipx.client.module.ModuleCategory;
 import com.dipx.client.module.ModuleRegistry;
 import com.dipx.client.module.ModuleConfigStore;
 import com.dipx.client.module.MaceLandingTelemetry;
+import com.dipx.client.module.WebEscapeTelemetry;
 
 import java.util.HashSet;
 import java.util.List;
@@ -20,7 +21,7 @@ public final class ModuleRegistrySmokeTest {
     public static void main(String[] args) {
         ModuleRegistry.registerDefaults();
         List<DIPXModule> modules = ModuleRegistry.all();
-        check(modules.size() == 19, "Expected 19 implemented modules, got " + modules.size());
+        check(modules.size() == 20, "Expected 20 implemented modules, got " + modules.size());
         check(ModuleRegistry.enabledCount() == 0, "Modules must start disabled");
 
         Set<String> names = new HashSet<>();
@@ -42,6 +43,7 @@ public final class ModuleRegistrySmokeTest {
         check(names.contains("Spear Charge HUD"), "Manual spear charge telemetry HUD is missing");
         check(names.contains("Shield Status HUD"), "Manual shield status HUD is missing");
         check(names.contains("Movement Telemetry HUD"), "Movement telemetry HUD is missing");
+        check(names.contains("Web Escape HUD"), "Manual cobweb contact helper is missing");
         check(names.contains("Pearl Trajectory HUD"), "Pearl trajectory preview module is missing");
 
         String idleSpear = com.dipx.client.module.CombatHudTelemetry.spearChargeLine(false, 0, 0.0);
@@ -254,6 +256,17 @@ public final class ModuleRegistrySmokeTest {
                         && invalidPearl.points().isEmpty(),
                 "Invalid pearl trajectory input was not rejected safely");
 
+        check(WebEscapeTelemetry.statusLine(0, 0.0).equals("Web Escape: CLEAR"),
+                "Clear cobweb state is incorrect");
+        String oneCobweb = WebEscapeTelemetry.statusLine(1, 0.37);
+        check(oneCobweb.equals("Web Escape: COBWEB CONTACT | blocks: 1 | move: 0.37 b/t | MANUAL"),
+                "Single-block cobweb contact guidance is incorrect: " + oneCobweb);
+        String twoCobwebs = WebEscapeTelemetry.statusLine(2, Double.NaN);
+        check(twoCobwebs.equals("Web Escape: COBWEB CONTACT | blocks: 2 | move: 0.00 b/t | MANUAL"),
+                "Multiple-block cobweb contact or invalid speed handling is incorrect: " + twoCobwebs);
+        check(WebEscapeTelemetry.statusLine(-1, 0.2).equals("Web Escape: UNAVAILABLE"),
+                "Unavailable cobweb scan was not handled safely");
+
         DIPXModule first = modules.get(0);
         first.toggle();
         check(first.enabled(), "Toggle did not enable the module");
@@ -262,7 +275,7 @@ public final class ModuleRegistrySmokeTest {
         check(ModuleRegistry.enabledCount() == 0, "Enabled count did not reset");
 
         ModuleRegistry.registerDefaults();
-        check(ModuleRegistry.all().size() == 19, "Repeated registration duplicated modules");
+        check(ModuleRegistry.all().size() == 20, "Repeated registration duplicated modules");
 
         // Settings round-trip through a temporary config directory, never the user's config.
         java.nio.file.Path configDirectory = null;
@@ -274,18 +287,21 @@ public final class ModuleRegistrySmokeTest {
                     .filter(module -> module.name().equals("Spear Assist HUD")).findFirst().orElseThrow();
             DIPXModule maceLanding = modules.stream()
                     .filter(module -> module.name().equals("Mace Landing HUD")).findFirst().orElseThrow();
+            DIPXModule webEscape = modules.stream()
+                    .filter(module -> module.name().equals("Web Escape HUD")).findFirst().orElseThrow();
             fullBright.setEnabled(true);
             spearAssist.setEnabled(true);
             maceLanding.setEnabled(true);
+            webEscape.setEnabled(true);
             ModuleConfigStore.save(configDirectory, modules);
             java.nio.file.Path configFile = configDirectory.resolve(ModuleConfigStore.FILE_NAME);
             check(java.nio.file.Files.isRegularFile(configFile), "Config file was not written");
 
             for (DIPXModule module : modules) module.setEnabled(false);
             ModuleConfigStore.load(configDirectory, modules);
-            check(fullBright.enabled() && spearAssist.enabled() && maceLanding.enabled(),
+            check(fullBright.enabled() && spearAssist.enabled() && maceLanding.enabled() && webEscape.enabled(),
                     "Enabled module states were not restored");
-            check(ModuleRegistry.enabledCount() == 3, "Restored enabled count is incorrect");
+            check(ModuleRegistry.enabledCount() == 4, "Restored enabled count is incorrect");
 
             java.util.Properties malformed = new java.util.Properties();
             malformed.setProperty("module.FullBright", "not-a-boolean");
@@ -298,7 +314,7 @@ public final class ModuleRegistrySmokeTest {
             check(fullBright.enabled(), "Malformed value should not overwrite a valid in-memory state");
             check(modules.stream().filter(module -> module.name().equals("Toggle Sprint"))
                     .findFirst().orElseThrow().enabled(), "Known setting was not loaded");
-            check(ModuleRegistry.enabledCount() == 4,
+            check(ModuleRegistry.enabledCount() == 5,
                     "Unknown settings or malformed values changed the wrong modules");
 
             java.nio.file.Files.writeString(configFile, "module.FullBright=\\uZZZZ\\n");
@@ -360,7 +376,7 @@ public final class ModuleRegistrySmokeTest {
             }
         }
 
-        System.out.println("DIPX regression checks passed: 19 modules, pearl/shield/Mace landing/Mace/Spear and movement telemetry, idempotent registry, "
+        System.out.println("DIPX regression checks passed: 20 modules, pearl/shield/Mace landing/Mace/Spear/Web Escape and movement telemetry, idempotent registry, "
                 + "enabled counter, immutable snapshot, and responsive layouts.");
     }
 }

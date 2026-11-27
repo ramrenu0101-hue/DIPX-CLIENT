@@ -6,6 +6,7 @@ import com.dipx.client.module.ModuleRegistry;
 import com.dipx.client.module.ModuleConfigStore;
 import com.dipx.client.module.PearlTrajectoryTelemetry;
 import com.dipx.client.module.MaceLandingTelemetry;
+import com.dipx.client.module.WebEscapeTelemetry;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.loader.api.FabricLoader;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
@@ -64,6 +65,7 @@ public final class DIPXClient implements ClientModInitializer {
     private static boolean smokePearlWorldTestsComplete;
     private static boolean smokePearlWorldTestsSucceeded;
     private static boolean smokeMaceLandingTestsComplete;
+    private static boolean smokeWebEscapeTestsComplete;
     private static final List<BlockPos> smokePearlTestBlocks = new ArrayList<>();
     private static PearlTrajectoryTelemetry.Preview pearlPreview = PearlTrajectoryTelemetry.unavailable();
     private static boolean pearlAvailable;
@@ -537,6 +539,36 @@ public final class DIPXClient implements ClientModInitializer {
                 entityUnderCrosshair, targetDistance, blockUnderCrosshair);
     }
 
+    /**
+     * Counts cobweb blocks whose unit cubes overlap the player's current bounding box.
+     * This is a read-only contact probe; it does not change movement or send packets.
+     */
+    private static int countCobwebBlocks(MinecraftClient client, PlayerEntity player) {
+        if (client == null || client.world == null || player == null) return -1;
+        Box bounds = player.getBoundingBox();
+        int minX = MathHelper.floor(bounds.minX);
+        int minY = MathHelper.floor(bounds.minY);
+        int minZ = MathHelper.floor(bounds.minZ);
+        int maxX = MathHelper.floor(bounds.maxX - 1.0E-7);
+        int maxY = MathHelper.floor(bounds.maxY - 1.0E-7);
+        int maxZ = MathHelper.floor(bounds.maxZ - 1.0E-7);
+        if (maxX < minX || maxY < minY || maxZ < minZ) return -1;
+
+        int overlaps = 0;
+        for (int x = minX; x <= maxX; x++) {
+            for (int y = minY; y <= maxY; y++) {
+                for (int z = minZ; z <= maxZ; z++) {
+                    BlockPos pos = new BlockPos(x, y, z);
+                    if (client.world.getBlockState(pos).isOf(Blocks.COBWEB)
+                            && bounds.intersects(new Box(x, y, z, x + 1.0, y + 1.0, z + 1.0))) {
+                        overlaps++;
+                    }
+                }
+            }
+        }
+        return overlaps;
+    }
+
     /** Exercises the real loaded-world floor raycast and displayed landing estimate. */
     private static void runMaceLandingWorldSmokeTests(MinecraftClient client) {
         if (!Boolean.getBoolean("dipx.smoke.gui") || !smokePearlWorldTestsSucceeded
@@ -680,6 +712,75 @@ public final class DIPXClient implements ClientModInitializer {
             player.setPitch(savedPitch);
             player.getInventory().setStack(selectedSlot, savedStack);
             smokeMaceLandingTestsComplete = true;
+        }
+    }
+
+    /** Validates cobweb contact against real block states in the isolated CI world. */
+    private static void runWebEscapeWorldSmokeTests(MinecraftClient client) {
+        if (!Boolean.getBoolean("dipx.smoke.gui") || !smokeMaceLandingTestsComplete
+                || smokeWebEscapeTestsComplete || client.player == null || client.world == null) {
+            return;
+        }
+
+        PlayerEntity player = client.player;
+        BlockPos lower = BlockPos.ofFloored(player.getX(), player.getY() + 0.25, player.getZ());
+        BlockPos upper = lower.up();
+        var originalLower = client.world.getBlockState(lower);
+        var originalUpper = client.world.getBlockState(upper);
+        int baseline = countCobwebBlocks(client, player);
+        boolean contactPassed = false;
+        boolean clearPassed = false;
+
+        try {
+            if (baseline != 0 || originalLower.isOf(Blocks.COBWEB) || originalUpper.isOf(Blocks.COBWEB)) {
+                throw new IllegalStateException("Web Escape fixture requires a clear player body; baseline="
+                        + baseline);
+            }
+            if (!client.world.setBlockState(lower, Blocks.COBWEB.getDefaultState())) {
+                throw new IllegalStateException("Could not place lower cobweb fixture at " + lower);
+            }
+            if (!client.world.setBlockState(upper, Blocks.COBWEB.getDefaultState())) {
+                throw new IllegalStateException("Could not place upper cobweb fixture at " + upper);
+            }
+
+            int overlaps = countCobwebBlocks(client, player);
+            if (overlaps != 2) {
+                throw new IllegalStateException("Expected two cobweb blocks to overlap player bounds, got " + overlaps);
+            }
+            Vec3d velocity = player.getVelocity();
+            double horizontalSpeed = Math.sqrt(velocity.x * velocity.x + velocity.z * velocity.z);
+            String contactLine = WebEscapeTelemetry.statusLine(overlaps, horizontalSpeed);
+            if (!contactLine.contains("COBWEB CONTACT") || !contactLine.contains("blocks: 2")
+                    || !contactLine.contains("MANUAL")) {
+                throw new IllegalStateException("Cobweb contact guidance mismatch: " + contactLine);
+            }
+            LOGGER.info("DIPX web escape world smoke PASS scenario=contact result={}", contactLine);
+            contactPassed = true;
+        } catch (Throwable error) {
+            LOGGER.error("DIPX web escape world smoke FAILED", error);
+        } finally {
+            try {
+                client.world.setBlockState(lower, originalLower);
+                client.world.setBlockState(upper, originalUpper);
+                int restored = countCobwebBlocks(client, player);
+                if (restored != baseline) {
+                    throw new IllegalStateException("Cobweb fixture cleanup mismatch: expected "
+                            + baseline + " overlapping blocks, got " + restored);
+                }
+                String clearLine = WebEscapeTelemetry.statusLine(restored, 0.0);
+                if (!clearLine.equals("Web Escape: CLEAR")) {
+                    throw new IllegalStateException("Clear-state guidance mismatch: " + clearLine);
+                }
+                LOGGER.info("DIPX web escape world smoke PASS scenario=clear result={}", clearLine);
+                clearPassed = true;
+            } catch (Throwable cleanupError) {
+                LOGGER.error("DIPX web escape world smoke FAILED during fixture cleanup", cleanupError);
+            }
+            smokeWebEscapeTestsComplete = true;
+        }
+
+        if (contactPassed && clearPassed) {
+            LOGGER.info("DIPX web escape world smoke complete scenarios=2");
         }
     }
 
@@ -946,6 +1047,7 @@ public final class DIPXClient implements ClientModInitializer {
                 createSmokeWorld(client);
                 runPearlWorldSmokeTests(client);
                 runMaceLandingWorldSmokeTests(client);
+                runWebEscapeWorldSmokeTests(client);
             }
         });
 
@@ -1106,6 +1208,19 @@ public final class DIPXClient implements ClientModInitializer {
                         client.player.isSprinting(), client.player.isSneaking());
                 drawContext.drawText(client.textRenderer, Text.literal(movementLine),
                         x, y, 0xFFB7D8FF, true);
+                y += 12;
+            }
+
+            // Cobweb contact is detected from the player's current bounding box.
+            // The helper only informs the player; movement and escape remain manual.
+            if (enabled("Web Escape HUD")) {
+                int cobwebBlocks = countCobwebBlocks(client, client.player);
+                var velocity = client.player.getVelocity();
+                double horizontalSpeed = Math.sqrt(
+                        velocity.x * velocity.x + velocity.z * velocity.z);
+                String webLine = WebEscapeTelemetry.statusLine(cobwebBlocks, horizontalSpeed);
+                drawContext.drawText(client.textRenderer, Text.literal(webLine),
+                        x, y, cobwebBlocks > 0 ? 0xFFFFB17A : 0xFFB7D8FF, true);
                 y += 12;
             }
 

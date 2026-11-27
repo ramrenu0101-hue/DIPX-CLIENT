@@ -287,3 +287,28 @@ for scenario in too-close min-boundary in-range max-boundary out-of-range creati
 done
 echo "Loaded singleplayer world: Mace Landing raycast and six vanilla Spear reach classifications passed." \
   | tee -a gui-smoke/smoke-status.txt
+
+for attempt in $(seq 1 60); do
+  if grep -q "DIPX web escape world smoke complete scenarios=2" "$LOG"; then break; fi
+  if grep -q "DIPX web escape world smoke FAILED" "$LOG"; then
+    echo "Loaded-world Web Escape integration test failed."
+    tail -n 180 "$LOG"
+    exit 1
+  fi
+  sleep 2
+done
+if ! grep -q "DIPX web escape world smoke complete scenarios=2" "$LOG"; then
+  echo "Timed out waiting for the loaded-world Web Escape integration test."
+  tail -n 180 "$LOG"
+  exit 1
+fi
+for scenario in contact clear; do
+  if ! grep -Fq "DIPX web escape world smoke PASS scenario=$scenario " "$LOG"; then
+    echo "Missing passing Web Escape world scenario: $scenario"
+    tail -n 180 "$LOG"
+    exit 1
+  fi
+done
+echo "Loaded singleplayer world: Web Escape cobweb contact detection and cleanup passed." \
+  | tee -a gui-smoke/smoke-status.txt
+
