@@ -151,7 +151,7 @@ jobs:
           grep -q "SpearChargeTelemetry.chargeLine" DIPXClient.java
           grep -q "DataComponentTypes.KINETIC_WEAPON" DIPXClient.java
           grep -q "DIPX spear charge world smoke" DIPXClient.java
-          grep -q "SpearChargeTelemetry" ModuleRegistrySmokeTest.java
+          grep -q "SpearChargeTelemetry" ci/ModuleRegistrySmokeTest.java
           grep -q "Web Escape HUD" ModuleRegistry.java
           grep -q "ModuleConfigStore.load" DIPXClient.java
           grep -q "DIPXClient.saveModuleConfig()" DIPXScreen.java
