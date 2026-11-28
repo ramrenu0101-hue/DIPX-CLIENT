@@ -1,40 +1,189 @@
-
 name: Build DIPX Client
 
 on:
   workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - 'codex/**'
+    paths:
+      - 'DIPXClient.java'
+      - 'DIPXScreen.java'
+      - 'DIPXLayout.java'
+      - 'ModuleRegistry.java'
+      - 'ModuleCategory.java'
+      - 'ModuleConfigStore.java'
+      - 'CombatHudTelemetry.java'
+      - 'MovementHudTelemetry.java'
+      - 'MaceImpactTelemetry.java'
+      - 'MaceLandingTelemetry.java'
+      - 'ShieldStatusTelemetry.java'
+      - 'PearlTrajectoryTelemetry.java'
+      - 'WebEscapeTelemetry.java'
+      - 'SpearChargeTelemetry.java'
+      - 'ci/**'
+      - '.github/workflows/build.yml'
+      - 'DIPX-Client-source-ready.zip'
 
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Download source
+      - name: Checkout source
         uses: actions/checkout@v4
-
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '21'
-
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.2.0'
-
-      - name: Extract source
+      - name: Extract and overlay maintained sources
+        shell: bash
         run: |
+          set -euo pipefail
           mkdir -p /tmp/dipx
           unzip -q DIPX-Client-source-ready.zip -d /tmp/dipx
-          PROJECT=$(find /tmp/dipx -name build.gradle -printf '%h\n' | head -1)
+          PROJECT="$(find /tmp/dipx -name build.gradle -printf '%h\n' | head -1)"
           test -n "$PROJECT"
-          gradle -p "$PROJECT" build --no-daemon
+          SOURCE_FILE="$(find "$PROJECT" -path '*/com/dipx/client/DIPXClient.java' -print -quit)"
+          if [ -n "$SOURCE_FILE" ]; then
+            SOURCE_ROOT="$(dirname "$SOURCE_FILE")"
+          else
+            SOURCE_ROOT="$PROJECT/src/main/java/com/dipx/client"
+          fi
+          mkdir -p "$SOURCE_ROOT/gui" "$SOURCE_ROOT/module"
+          cp DIPXClient.java "$SOURCE_ROOT/DIPXClient.java"
+          cp DIPXScreen.java "$SOURCE_ROOT/gui/DIPXScreen.java"
+          cp DIPXLayout.java "$SOURCE_ROOT/gui/DIPXLayout.java"
+          cp ModuleRegistry.java "$SOURCE_ROOT/module/ModuleRegistry.java"
+          cp ModuleCategory.java "$SOURCE_ROOT/module/ModuleCategory.java"
+          cp ModuleConfigStore.java "$SOURCE_ROOT/module/ModuleConfigStore.java"
+          cp CombatHudTelemetry.java "$SOURCE_ROOT/module/CombatHudTelemetry.java"
+          cp MovementHudTelemetry.java "$SOURCE_ROOT/module/MovementHudTelemetry.java"
+          cp MaceImpactTelemetry.java "$SOURCE_ROOT/module/MaceImpactTelemetry.java"
+          cp MaceLandingTelemetry.java "$SOURCE_ROOT/module/MaceLandingTelemetry.java"
+          cp ShieldStatusTelemetry.java "$SOURCE_ROOT/module/ShieldStatusTelemetry.java"
+          cp PearlTrajectoryTelemetry.java "$SOURCE_ROOT/module/PearlTrajectoryTelemetry.java"
+          cp WebEscapeTelemetry.java "$SOURCE_ROOT/module/WebEscapeTelemetry.java"
+          cp SpearChargeTelemetry.java "$SOURCE_ROOT/module/SpearChargeTelemetry.java"
+          echo "DIPX_PROJECT=$PROJECT" >> "$GITHUB_ENV"
+          echo "Project: $PROJECT"
+          echo "Source root: $SOURCE_ROOT"
+          find "$PROJECT/src/client/java/com/dipx/client" -type f -name '*.java' -print
+      - name: Run registry and mobile-layout regression tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/dipx-regression
+          javac -d /tmp/dipx-regression \
+            "$DIPX_PROJECT/src/client/java/com/dipx/client/module/DIPXModule.java" \
+            "$DIPX_PROJECT/src/client/java/com/dipx/client/module/ModuleCategory.java" \
+            "$DIPX_PROJECT/src/client/java/com/dipx/client/module/ModuleRegistry.java" \
+            "$DIPX_PROJECT/src/client/java/com/dipx/client/module/ModuleConfigStore.java" \
+            "$DIPX_PROJECT/src/client/java/com/dipx/client/module/CombatHudTelemetry.java" \
+            "$DIPX_PROJECT/src/client/java/com/dipx/client/module/MovementHudTelemetry.java" \
+            "$DIPX_PROJECT/src/client/java/com/dipx/client/module/MaceImpactTelemetry.java" \
+            "$DIPX_PROJECT/src/client/java/com/dipx/client/module/MaceLandingTelemetry.java" \
+            "$DIPX_PROJECT/src/client/java/com/dipx/client/module/ShieldStatusTelemetry.java" \
+            "$DIPX_PROJECT/src/client/java/com/dipx/client/module/PearlTrajectoryTelemetry.java" \
+            "$DIPX_PROJECT/src/client/java/com/dipx/client/module/WebEscapeTelemetry.java" \
+            "$DIPX_PROJECT/src/client/java/com/dipx/client/module/SpearChargeTelemetry.java" \
+            "$DIPX_PROJECT/src/client/java/com/dipx/client/gui/DIPXLayout.java" \
+            ci/ModuleRegistrySmokeTest.java
+          java -cp /tmp/dipx-regression com.dipx.client.ci.ModuleRegistrySmokeTest
+      - name: Build Fabric client
+        run: |
+          set -euo pipefail
+          gradle -p "$DIPX_PROJECT" clean build --no-daemon
           mkdir -p dist
-          find "$PROJECT/build/libs" -name '*.jar' -type f -exec cp {} dist/ \;
-
+          find "$DIPX_PROJECT/build/libs" -maxdepth 1 -name '*.jar' -type f -exec cp {} dist/ \;
+          test -n "$(find dist -maxdepth 1 -name '*.jar' -print -quit)"
+          cp DIPX-Client-source-ready.zip dist/
+          mkdir -p diagnostics
+          cp -R "$DIPX_PROJECT/src/client/java/com/dipx/client" diagnostics/client-source
+          cp -R "$DIPX_PROJECT/src/main/resources" diagnostics/resources 2>/dev/null || true
+          zip -qr dist/DIPX-source-diagnostic.zip diagnostics
+      - name: Verify remapped client JAR and metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          JAR="$(find dist -maxdepth 1 -name '*.jar' ! -name '*sources.jar' -print -quit)"
+          test -n "$JAR"
+          jar tf "$JAR" | grep -q fabric.mod.json
+          jar tf "$JAR" | grep -q com/dipx/client/DIPXClient.class
+          jar tf "$JAR" | grep -q com/dipx/client/gui/DIPXScreen.class
+          jar tf "$JAR" | grep -q com/dipx/client/gui/DIPXLayout.class
+          jar tf "$JAR" | grep -q com/dipx/client/module/ModuleRegistry.class
+          jar tf "$JAR" | grep -q com/dipx/client/module/ModuleConfigStore.class
+          jar tf "$JAR" | grep -q com/dipx/client/module/CombatHudTelemetry.class
+          jar tf "$JAR" | grep -q com/dipx/client/module/MovementHudTelemetry.class
+          jar tf "$JAR" | grep -q com/dipx/client/module/MaceImpactTelemetry.class
+          jar tf "$JAR" | grep -q com/dipx/client/module/MaceLandingTelemetry.class
+          jar tf "$JAR" | grep -q com/dipx/client/module/ShieldStatusTelemetry.class
+          jar tf "$JAR" | grep -q com/dipx/client/module/PearlTrajectoryTelemetry.class
+          jar tf "$JAR" | grep -q com/dipx/client/module/WebEscapeTelemetry.class
+          jar tf "$JAR" | grep -q com/dipx/client/module/SpearChargeTelemetry.class
+          grep -q "Spear Charge HUD" DIPXClient.java
+          grep -q "CombatHudTelemetry.spearRangeLine" DIPXClient.java
+          grep -q "getEyePos().distanceTo(((EntityHitResult) client.crosshairTarget).getPos())" DIPXClient.java
+          grep -q "ENTITY IN RANGE" CombatHudTelemetry.java
+          grep -q "ItemTags.SPEARS" DIPXClient.java
+          grep -q "getAttackRange" DIPXClient.java
+          grep -q "DIPX spear range world smoke PASS" DIPXClient.java
+          grep -q "Movement Telemetry HUD" DIPXClient.java
+          grep -q "MaceImpactTelemetry.impactLine" DIPXClient.java
+          grep -q "MaceLandingTelemetry.landingLine" DIPXClient.java
+          grep -q "Mace Landing HUD" DIPXClient.java
+          grep -q "RaycastContext.ShapeType.COLLIDER" DIPXClient.java
+          grep -q "MaceItem.shouldDealAdditionalDamage" DIPXClient.java
+          grep -q "ShieldStatusTelemetry.shieldLine" DIPXClient.java
+          grep -q "Shield Status HUD" DIPXClient.java
+          grep -q "PearlTrajectoryTelemetry.trace" DIPXClient.java
+          grep -q "DIPX pearl world smoke" DIPXClient.java
+          grep -q "Pearl Trajectory HUD" DIPXClient.java
+          grep -q "Web Escape HUD" DIPXClient.java
+          grep -q "WebEscapeTelemetry.statusLine" DIPXClient.java
+          grep -q "SpearChargeTelemetry.chargeLine" DIPXClient.java
+          grep -q "DataComponentTypes.KINETIC_WEAPON" DIPXClient.java
+          grep -q "DIPX spear charge world smoke" DIPXClient.java
+          grep -q "SpearChargeTelemetry" ci/ModuleRegistrySmokeTest.java
+          grep -q "Web Escape HUD" ModuleRegistry.java
+          grep -q "ModuleConfigStore.load" DIPXClient.java
+          grep -q "DIPXClient.saveModuleConfig()" DIPXScreen.java
+          grep -q "private ModuleCategory selected = ModuleCategory.COMBAT;" DIPXScreen.java
+          grep -q "else if (guiPressed)" DIPXClient.java
+          grep -q "DIPXClient.closeGui()" DIPXScreen.java
+          test "$(grep -c 'add(pending,' ModuleRegistry.java)" -eq 20
+          unzip -p "$JAR" fabric.mod.json | python3 -c "import json,sys; d=json.load(sys.stdin); assert d['id']=='dipx'; assert d['depends']['minecraft']=='=1.21.11'; assert 'com.dipx.client.DIPXClient' in d['entrypoints']['client']; print('Verified DIPX Fabric metadata and required classes')"
+      - name: Prepare virtual display for real GUI smoke test
+        run: |
+          if ! command -v xvfb-run >/dev/null || ! command -v xdotool >/dev/null || ! command -v import >/dev/null || ! command -v openbox >/dev/null || ! command -v wmctrl >/dev/null || ! command -v glxinfo >/dev/null; then
+            sudo apt-get update
+            sudo apt-get install -y xvfb xdotool imagemagick openbox wmctrl x11-utils mesa-utils
+          fi
+      - name: Launch Minecraft, capture the real DIPX GUI, and test Pearl trajectories in a world
+        run: timeout --signal=TERM --kill-after=5s 420s xvfb-run -a -s "-screen 0 1280x720x24 +extension GLX" bash ci/gui-smoke.sh
       - name: Upload JAR
         uses: actions/upload-artifact@v4
         with:
           name: DIPX-Client-JAR
           path: dist/*.jar
+      - name: Upload source and diagnostic artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: DIPX-Source-Diagnostic
+          path: |
+            dist/DIPX-source-diagnostic.zip
+            dist/DIPX-Client-source-ready.zip
+      - name: Upload GUI smoke evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: DIPX-GUI-Smoke
+          path: gui-smoke/
+          if-no-files-found: warn
