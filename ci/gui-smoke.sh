@@ -312,3 +312,26 @@ done
 echo "Loaded singleplayer world: Web Escape cobweb contact detection and cleanup passed." \
   | tee -a gui-smoke/smoke-status.txt
 
+for attempt in $(seq 1 60); do
+  if grep -q "DIPX spear charge world smoke complete scenarios=" "$LOG"; then break; fi
+  if grep -q "DIPX spear charge world smoke FAILED" "$LOG"; then
+    echo "Loaded-world Spear charge component/stage test failed."
+    tail -n 180 "$LOG"
+    exit 1
+  fi
+  sleep 2
+done
+if ! grep -q "DIPX spear charge world smoke complete scenarios=" "$LOG"; then
+  echo "Timed out waiting for the vanilla Spear kinetic-component stage test."
+  tail -n 180 "$LOG"
+  exit 1
+fi
+for scenario in vanilla-component engaged tired disengaged ended; do
+  if ! grep -Fq "DIPX spear charge world smoke PASS scenario=$scenario " "$LOG"; then
+    echo "Missing passing Spear charge scenario: $scenario"
+    tail -n 180 "$LOG"
+    exit 1
+  fi
+done
+echo "Loaded singleplayer world: vanilla Iron Spear component and Engaged/Tired/Disengaged charge windows passed." \
+  | tee -a gui-smoke/smoke-status.txt

@@ -7,6 +7,7 @@ import com.dipx.client.module.ModuleConfigStore;
 import com.dipx.client.module.PearlTrajectoryTelemetry;
 import com.dipx.client.module.MaceLandingTelemetry;
 import com.dipx.client.module.WebEscapeTelemetry;
+import com.dipx.client.module.SpearChargeTelemetry;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.loader.api.FabricLoader;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
@@ -17,6 +18,7 @@ import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.screen.world.CreateWorldScreen;
 import net.minecraft.client.gui.screen.world.WorldCreator;
 import net.minecraft.block.Blocks;
+import net.minecraft.component.DataComponentTypes;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.util.InputUtil;
@@ -66,6 +68,7 @@ public final class DIPXClient implements ClientModInitializer {
     private static boolean smokePearlWorldTestsSucceeded;
     private static boolean smokeMaceLandingTestsComplete;
     private static boolean smokeWebEscapeTestsComplete;
+    private static boolean smokeSpearChargeTestsComplete;
     private static final List<BlockPos> smokePearlTestBlocks = new ArrayList<>();
     private static PearlTrajectoryTelemetry.Preview pearlPreview = PearlTrajectoryTelemetry.unavailable();
     private static boolean pearlAvailable;
@@ -784,6 +787,94 @@ public final class DIPXClient implements ClientModInitializer {
         }
     }
 
+    /**
+     * Checks the real vanilla Iron Spear KINETIC_WEAPON component and verifies
+     * every charge stage against its own data-driven timing windows.
+     */
+    private static void runSpearChargeWorldSmokeTests(MinecraftClient client) {
+        if (!Boolean.getBoolean("dipx.smoke.gui") || !smokeWebEscapeTestsComplete
+                || smokeSpearChargeTestsComplete || client.player == null || client.world == null) {
+            return;
+        }
+
+        boolean passed = false;
+        try {
+            var spearStack = Items.IRON_SPEAR.getDefaultStack();
+            var kinetic = spearStack.get(DataComponentTypes.KINETIC_WEAPON);
+            if (kinetic == null) {
+                throw new IllegalStateException("Vanilla iron spear has no KINETIC_WEAPON component");
+            }
+
+            int delayTicks = kinetic.delayTicks();
+            int engagedTicks = kinetic.dismountConditions()
+                    .map(condition -> condition.maxDurationTicks()).orElse(-1);
+            int tiredTicks = kinetic.knockbackConditions()
+                    .map(condition -> condition.maxDurationTicks()).orElse(-1);
+            int damageTicks = kinetic.damageConditions()
+                    .map(condition -> condition.maxDurationTicks()).orElse(-1);
+
+            if (delayTicks < 0 || engagedTicks <= 0
+                    || tiredTicks <= engagedTicks || damageTicks <= tiredTicks) {
+                throw new IllegalStateException("Unexpected vanilla spear timing windows: delay="
+                        + delayTicks + " engaged=" + engagedTicks + " tired=" + tiredTicks
+                        + " damage=" + damageTicks);
+            }
+
+            LOGGER.info("DIPX spear charge world smoke PASS scenario=vanilla-component delay={} engaged={} tired={} damage={}",
+                    delayTicks, engagedTicks, tiredTicks, damageTicks);
+
+            if (delayTicks > 0) {
+                String warmup = SpearChargeTelemetry.chargeLine(true, true,
+                        delayTicks - 1, delayTicks, engagedTicks, tiredTicks, damageTicks, 0.0);
+                if (!warmup.contains("WARMUP")) {
+                    throw new IllegalStateException("Spear warmup stage mismatch: " + warmup);
+                }
+                LOGGER.info("DIPX spear charge world smoke PASS scenario=warmup result={}", warmup);
+            }
+
+            String engaged = SpearChargeTelemetry.chargeLine(true, true,
+                    delayTicks, delayTicks, engagedTicks, tiredTicks, damageTicks, 0.24);
+            if (!engaged.contains("ENGAGED")) {
+                throw new IllegalStateException("Spear engaged stage mismatch: " + engaged);
+            }
+            LOGGER.info("DIPX spear charge world smoke PASS scenario=engaged result={}", engaged);
+
+            String tired = SpearChargeTelemetry.chargeLine(true, true,
+                    delayTicks + engagedTicks, delayTicks, engagedTicks, tiredTicks, damageTicks, 0.31);
+            if (!tired.contains("TIRED")) {
+                throw new IllegalStateException("Spear tired stage mismatch: " + tired);
+            }
+            LOGGER.info("DIPX spear charge world smoke PASS scenario=tired result={}", tired);
+
+            String disengaged = SpearChargeTelemetry.chargeLine(true, true,
+                    delayTicks + tiredTicks, delayTicks, engagedTicks, tiredTicks, damageTicks, 0.38);
+            if (!disengaged.contains("DISENGAGED")) {
+                throw new IllegalStateException("Spear disengaged stage mismatch: " + disengaged);
+            }
+            LOGGER.info("DIPX spear charge world smoke PASS scenario=disengaged result={}", disengaged);
+
+            String ended = SpearChargeTelemetry.chargeLine(true, true,
+                    delayTicks + damageTicks, delayTicks, engagedTicks, tiredTicks, damageTicks, 0.42);
+            if (!ended.contains("WINDOW ENDED")) {
+                throw new IllegalStateException("Spear ended stage mismatch: " + ended);
+            }
+            LOGGER.info("DIPX spear charge world smoke PASS scenario=ended result={}", ended);
+            passed = true;
+        } catch (Throwable error) {
+            LOGGER.error("DIPX spear charge world smoke FAILED", error);
+        } finally {
+            smokeSpearChargeTestsComplete = true;
+        }
+
+        if (passed) {
+            int scenarios = 5;
+            if (Items.IRON_SPEAR.getDefaultStack().get(DataComponentTypes.KINETIC_WEAPON).delayTicks() > 0) {
+                scenarios++;
+            }
+            LOGGER.info("DIPX spear charge world smoke complete scenarios={}", scenarios);
+        }
+    }
+
     /** Draws a compact side-view arc so it remains readable on touch screens. */
     private static void drawPearlGraph(DrawContext context, MinecraftClient client,
                                        PearlTrajectoryTelemetry.Preview preview) {
@@ -1048,6 +1139,7 @@ public final class DIPXClient implements ClientModInitializer {
                 runPearlWorldSmokeTests(client);
                 runMaceLandingWorldSmokeTests(client);
                 runWebEscapeWorldSmokeTests(client);
+                runSpearChargeWorldSmokeTests(client);
             }
         });
 
@@ -1181,18 +1273,35 @@ public final class DIPXClient implements ClientModInitializer {
                 y += 12;
             }
 
-            // Manual spear telemetry only: read the active-use timer and the
-            // player's horizontal velocity; never trigger or release an attack.
+            // Manual spear telemetry reads the held item's vanilla kinetic-weapon
+            // timing windows. It never releases use, attacks, aims, or swaps items.
             if (enabled("Spear Charge HUD")) {
+                var activeStack = client.player.getActiveItem();
                 boolean chargingSpear = client.player.isUsingItem()
-                        && Registries.ITEM.getId(client.player.getActiveItem().getItem())
-                                .getPath().contains("spear");
+                        && activeStack.isIn(ItemTags.SPEARS);
+                boolean mainHandSpear = client.player.getMainHandStack().isIn(ItemTags.SPEARS);
+                boolean offHandSpear = client.player.getOffHandStack().isIn(ItemTags.SPEARS);
+                boolean spearHeld = chargingSpear || mainHandSpear || offHandSpear;
+                var spearStack = chargingSpear ? activeStack
+                        : mainHandSpear ? client.player.getMainHandStack()
+                        : client.player.getOffHandStack();
+                var kinetic = spearHeld ? spearStack.get(DataComponentTypes.KINETIC_WEAPON) : null;
+                int delayTicks = kinetic == null ? -1 : kinetic.delayTicks();
+                int engagedTicks = kinetic == null ? -1 : kinetic.dismountConditions()
+                        .map(condition -> condition.maxDurationTicks()).orElse(-1);
+                int tiredTicks = kinetic == null ? -1 : kinetic.knockbackConditions()
+                        .map(condition -> condition.maxDurationTicks()).orElse(-1);
+                int damageTicks = kinetic == null ? -1 : kinetic.damageConditions()
+                        .map(condition -> condition.maxDurationTicks()).orElse(-1);
                 int useTicks = chargingSpear ? client.player.getItemUseTime() : 0;
                 var velocity = client.player.getVelocity();
                 double horizontalSpeed = Math.sqrt(
                         velocity.x * velocity.x + velocity.z * velocity.z);
-                String spearCharge = com.dipx.client.module.CombatHudTelemetry.spearChargeLine(
-                        chargingSpear, useTicks, horizontalSpeed);
+                String spearCharge = SpearChargeTelemetry.chargeLine(
+                        spearHeld, chargingSpear, useTicks, delayTicks,
+                        engagedTicks, tiredTicks, damageTicks, horizontalSpeed);
+                int availableHudWidth = Math.max(1, client.getWindow().getScaledWidth() - x - 8);
+                spearCharge = client.textRenderer.trimToWidth(spearCharge, availableHudWidth);
                 drawContext.drawText(client.textRenderer, Text.literal(spearCharge),
                         x, y, 0xFF9CE8FF, true);
                 y += 12;

@@ -22,6 +22,7 @@ on:
       - 'ShieldStatusTelemetry.java'
       - 'PearlTrajectoryTelemetry.java'
       - 'WebEscapeTelemetry.java'
+      - 'SpearChargeTelemetry.java'
       - 'ci/**'
       - '.github/workflows/build.yml'
       - 'DIPX-Client-source-ready.zip'
@@ -69,6 +70,7 @@ jobs:
           cp ShieldStatusTelemetry.java "$SOURCE_ROOT/module/ShieldStatusTelemetry.java"
           cp PearlTrajectoryTelemetry.java "$SOURCE_ROOT/module/PearlTrajectoryTelemetry.java"
           cp WebEscapeTelemetry.java "$SOURCE_ROOT/module/WebEscapeTelemetry.java"
+          cp SpearChargeTelemetry.java "$SOURCE_ROOT/module/SpearChargeTelemetry.java"
           echo "DIPX_PROJECT=$PROJECT" >> "$GITHUB_ENV"
           echo "Project: $PROJECT"
           echo "Source root: $SOURCE_ROOT"
@@ -90,6 +92,7 @@ jobs:
             "$DIPX_PROJECT/src/client/java/com/dipx/client/module/ShieldStatusTelemetry.java" \
             "$DIPX_PROJECT/src/client/java/com/dipx/client/module/PearlTrajectoryTelemetry.java" \
             "$DIPX_PROJECT/src/client/java/com/dipx/client/module/WebEscapeTelemetry.java" \
+            "$DIPX_PROJECT/src/client/java/com/dipx/client/module/SpearChargeTelemetry.java" \
             "$DIPX_PROJECT/src/client/java/com/dipx/client/gui/DIPXLayout.java" \
             ci/ModuleRegistrySmokeTest.java
           java -cp /tmp/dipx-regression com.dipx.client.ci.ModuleRegistrySmokeTest
@@ -124,6 +127,7 @@ jobs:
           jar tf "$JAR" | grep -q com/dipx/client/module/ShieldStatusTelemetry.class
           jar tf "$JAR" | grep -q com/dipx/client/module/PearlTrajectoryTelemetry.class
           jar tf "$JAR" | grep -q com/dipx/client/module/WebEscapeTelemetry.class
+          jar tf "$JAR" | grep -q com/dipx/client/module/SpearChargeTelemetry.class
           grep -q "Spear Charge HUD" DIPXClient.java
           grep -q "CombatHudTelemetry.spearRangeLine" DIPXClient.java
           grep -q "getEyePos().distanceTo(((EntityHitResult) client.crosshairTarget).getPos())" DIPXClient.java
@@ -144,6 +148,10 @@ jobs:
           grep -q "Pearl Trajectory HUD" DIPXClient.java
           grep -q "Web Escape HUD" DIPXClient.java
           grep -q "WebEscapeTelemetry.statusLine" DIPXClient.java
+          grep -q "SpearChargeTelemetry.chargeLine" DIPXClient.java
+          grep -q "DataComponentTypes.KINETIC_WEAPON" DIPXClient.java
+          grep -q "DIPX spear charge world smoke" DIPXClient.java
+          grep -q "SpearChargeTelemetry" ModuleRegistrySmokeTest.java
           grep -q "Web Escape HUD" ModuleRegistry.java
           grep -q "ModuleConfigStore.load" DIPXClient.java
           grep -q "DIPXClient.saveModuleConfig()" DIPXScreen.java

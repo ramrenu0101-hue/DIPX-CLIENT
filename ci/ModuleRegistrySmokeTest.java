@@ -7,6 +7,7 @@ import com.dipx.client.module.ModuleRegistry;
 import com.dipx.client.module.ModuleConfigStore;
 import com.dipx.client.module.MaceLandingTelemetry;
 import com.dipx.client.module.WebEscapeTelemetry;
+import com.dipx.client.module.SpearChargeTelemetry;
 
 import java.util.HashSet;
 import java.util.List;
@@ -55,6 +56,37 @@ public final class ModuleRegistrySmokeTest {
         String sanitizedSpear = com.dipx.client.module.CombatHudTelemetry.spearChargeLine(true, -4, Double.NaN);
         check(sanitizedSpear.equals("Spear charge: 0t | Horizontal speed: 0.00 b/t"),
                 "Invalid telemetry inputs were not sanitized: " + sanitizedSpear);
+
+        check(SpearChargeTelemetry.chargeLine(false, false, 0, 0, 10, 30, 60, 0.0)
+                        .equals("Spear: NOT HELD"),
+                "Spear charge HUD must distinguish no held spear");
+        check(SpearChargeTelemetry.chargeLine(true, false, 0, 0, 10, 30, 60, 0.0)
+                        .equals("Spear: IDLE | speed: 0.00 b/t"),
+                "Idle held-spear state is incorrect");
+        String spearWarmup = SpearChargeTelemetry.chargeLine(
+                true, true, 1, 4, 10, 30, 60, 0.10);
+        check(spearWarmup.equals("Spear: WARMUP 3t left | use: 1t | speed: 0.10 b/t"),
+                "Data-driven spear warmup state is incorrect: " + spearWarmup);
+        String spearEngaged = SpearChargeTelemetry.chargeLine(
+                true, true, 4, 4, 10, 30, 60, 0.24);
+        check(spearEngaged.equals("Spear: ENGAGED 10t left | use: 4t | speed: 0.24 b/t"),
+                "Spear engaged window is incorrect: " + spearEngaged);
+        String spearTired = SpearChargeTelemetry.chargeLine(
+                true, true, 14, 4, 10, 30, 60, 0.31);
+        check(spearTired.equals("Spear: TIRED 20t left | use: 14t | speed: 0.31 b/t"),
+                "Spear tired window is incorrect: " + spearTired);
+        String spearDisengaged = SpearChargeTelemetry.chargeLine(
+                true, true, 34, 4, 10, 30, 60, 0.38);
+        check(spearDisengaged.equals("Spear: DISENGAGED 30t left | use: 34t | speed: 0.38 b/t"),
+                "Spear damage-only window is incorrect: " + spearDisengaged);
+        String spearWindowEnded = SpearChargeTelemetry.chargeLine(
+                true, true, 64, 4, 10, 30, 60, 0.42);
+        check(spearWindowEnded.equals("Spear: WINDOW ENDED | use: 64t | speed: 0.42 b/t"),
+                "Spear charge expiry state is incorrect: " + spearWindowEnded);
+        String spearUnknownWindow = SpearChargeTelemetry.chargeLine(
+                true, true, 12, 4, 30, 10, 60, Double.NaN);
+        check(spearUnknownWindow.equals("Spear: WINDOW UNKNOWN | use: 12t | speed: 0.00 b/t"),
+                "Malformed spear timing data was not handled safely: " + spearUnknownWindow);
 
         String spearNotHeld = com.dipx.client.module.CombatHudTelemetry.spearRangeLine(
                 false, 2.0, 4.5, false, Double.NaN, false);
